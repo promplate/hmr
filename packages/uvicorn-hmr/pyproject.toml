@@ -3,7 +3,7 @@ name = "uvicorn-hmr"
 version = "0.0.3"
 readme = "README.md"
 dependencies = [
-    "hmr~=0.2.0",
+    "hmr>=0.2,<0.4",
     "typer-slim~=0.15.1",
     "uvicorn>=0.24.0",
 ]
