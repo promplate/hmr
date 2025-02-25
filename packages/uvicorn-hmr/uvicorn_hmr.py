@@ -38,7 +38,7 @@ def main(
     from threading import Event, Thread
 
     from reactivity import memoized_method
-    from reactivity.hmr import SyncReloader
+    from reactivity.hmr.core import SyncReloader
     from uvicorn import Config, Server
 
     if TYPE_CHECKING:
