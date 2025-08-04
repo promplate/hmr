@@ -86,7 +86,7 @@ def main(
             ignored_paths = [Path(p).resolve() for p in reloader.excludes]
             if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                 logger.error("No files to watch for changes. The server will never reload.")
-            
+
             secho(f"* Running on http://{host}:{port}", fg="green")
             server.serve_forever(poll_interval=0.1)
             finish.set()
@@ -124,11 +124,11 @@ def main(
             with self.error_filter:
                 load(self.entry_module)
                 flask_app = getattr(self.entry_module, attr)
-                
+
                 # Configure Flask app
                 if debug:
                     flask_app.config['DEBUG'] = True
-                
+
                 start_server(flask_app)
 
         @override
