@@ -15,8 +15,7 @@ from .utils import display_path, try_patch
 class UvicornReloader(SyncReloader):
     """Custom reloader for uvicorn-hmr that extends SyncReloader."""
 
-    def __init__(self, file: Path, module: str, attr: str, reload_include: list[str], reload_exclude: list[str],
-                 is_package: bool, refresh: bool, clear: bool, slug: str, server_manager):
+    def __init__(self, file: Path, module: str, attr: str, reload_include: list[str], reload_exclude: list[str], is_package: bool, refresh: bool, clear: bool, slug: str, server_manager):  # noqa: FBT001
         super().__init__(str(file), reload_include, reload_exclude)
         self.file = file
         self.module = module
@@ -52,7 +51,7 @@ class UvicornReloader(SyncReloader):
             load(self.entry_module)
             app = getattr(self.entry_module, self.attr)
             if self.refresh:
-                app = try_patch(app)  # type: ignore
+                app = try_patch(app)
             self.server_manager.start_server(app, self.file, self.includes, self)
 
     @override

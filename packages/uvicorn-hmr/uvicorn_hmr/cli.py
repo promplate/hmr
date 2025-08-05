@@ -66,8 +66,7 @@ def main(
 
     # Create server manager and reloader
     server_manager = ServerManager(host, port, env_file, log_level, refresh)
-    reloader = UvicornReloader(file, module, attr, reload_include, reload_exclude,
-                               is_package, refresh, clear, slug, server_manager)
+    reloader = UvicornReloader(file, module, attr, reload_include, reload_exclude, is_package, refresh, clear, slug, server_manager)
 
     # Register cleanup function
     @register

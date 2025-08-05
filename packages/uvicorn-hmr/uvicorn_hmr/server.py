@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class ServerManager:
     """Manages the Uvicorn server lifecycle."""
 
-    def __init__(self, host: str, port: int, env_file: Path | None, log_level: str | None, refresh: bool):
+    def __init__(self, host: str, port: int, env_file: Path | None, log_level: str | None, refresh: bool):  # noqa: FBT001
         self.host = host
         self.port = port
         self.env_file = env_file
@@ -32,6 +32,7 @@ class ServerManager:
             ignored_paths = [Path(p).resolve() for p in reloader.excludes]
             if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                 from logging import getLogger
+
                 logger = getLogger("uvicorn.error")
                 logger.error("No files to watch for changes. The server will never reload.")
             server.run()
