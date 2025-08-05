@@ -16,7 +16,7 @@ def main(
     reload_exclude: list[str] = [".venv"],  # noqa: B006
     host: str = "localhost",
     port: int = 8000,
-    env_file: Path | None = None,
+    env_file: Path | None = None,  # noqa: ARG001 # Kept for CLI compatibility with uvicorn-hmr
     log_level: str | None = "info",
     refresh: Annotated[bool, Option("--refresh", help="Enable automatic browser page refreshing with `fastapi-reloader` (requires installation)")] = False,  # noqa: FBT002
     clear: Annotated[bool, Option("--clear", help="Clear the terminal before restarting the server")] = False,  # noqa: FBT002
@@ -62,10 +62,10 @@ def main(
     from logging import getLogger
     from threading import Event, Thread
 
-    from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
-    from reactivity.hmr.utils import load
     from hypercorn import Config
     from hypercorn.asyncio import serve
+    from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
+    from reactivity.hmr.utils import load
     from watchfiles import Change
 
     if TYPE_CHECKING:
@@ -92,28 +92,39 @@ def main(
             config.loglevel = log_level.upper()
         # Note: hypercorn doesn't have direct env_file support like uvicorn
         # Users would need to load env vars manually if needed
-        
+
         finish = Event()
         shutdown_requested = Event()
-        
+
         def run_server():
             watched_paths = [Path(p).resolve() for p in (file, *reload_include)]
             ignored_paths = [Path(p).resolve() for p in reloader.excludes]
             if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                 logger.error("No files to watch for changes. The server will never reload.")
-            
+
             # Create new event loop for the server thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
             async def serve_app():
+                # Create an asyncio event that will be triggered when shutdown is requested
+                shutdown_event = asyncio.Event()
+
+                def check_shutdown():
+                    if shutdown_requested.is_set():
+                        shutdown_event.set()
+                    else:
+                        # Check again after a short delay
+                        loop.call_later(0.1, check_shutdown)
+
+                # Start the checking
+                check_shutdown()
+
                 async def shutdown_trigger():
-                    # Poll the threading event in an async way
-                    while not shutdown_requested.is_set():
-                        await asyncio.sleep(0.1)
-                
+                    await shutdown_event.wait()
+
                 await serve(app, config, shutdown_trigger=shutdown_trigger)
-            
+
             try:
                 loop.run_until_complete(serve_app())
             except Exception as e:
