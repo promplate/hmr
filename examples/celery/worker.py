@@ -28,10 +28,10 @@ class CeleryWorkerThread(Thread):
 
         # Create worker instance
         self.worker = app.Worker(
-            loglevel='INFO',
+            loglevel="INFO",
             concurrency=1,
             # Important: Don't hijack the root logger to play nice with HMR
-            hijack_root_logger=False
+            hijack_root_logger=False,
         )
 
         # Start the worker
@@ -78,6 +78,7 @@ if __name__ == "__main__":
         # Keep the main thread alive
         while True:
             import time
+
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
