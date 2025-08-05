@@ -1,0 +1,14 @@
+[project]
+name = "flask-hmr-demo"
+version = "0"
+requires-python = ">=3.12"
+dependencies = [
+    "flask~=3.1.0",
+    "flask-hmr",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+flask-hmr = { workspace = true }
