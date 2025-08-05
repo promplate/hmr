@@ -18,15 +18,15 @@ def add_numbers(x, y):
 def process_data(data):
     """Process some data - this can be updated without restarting worker."""
     logger.info(f"Processing data: {data}")
-    
+
     # This logic can be modified and will be hot-reloaded
     processed = {
         'original': data,
         'length': len(str(data)),
-        'doubled': data * 2 if isinstance(data, (int, float)) else f"{data}_{data}",
+        'doubled': data * 2 if isinstance(data, int | float) else f"{data}_{data}",
         'type': type(data).__name__
     }
-    
+
     logger.info(f"Processed result: {processed}")
     return processed
 
@@ -35,13 +35,13 @@ def process_data(data):
 def slow_task(seconds=5):
     """A task that takes some time - useful for testing HMR during execution."""
     import time
-    
+
     logger.info(f"Starting slow task that will take {seconds} seconds...")
-    
+
     for i in range(seconds):
         time.sleep(1)
         logger.info(f"Slow task progress: {i+1}/{seconds}")
-    
+
     logger.info("Slow task completed!")
     return f"Completed after {seconds} seconds"
 
