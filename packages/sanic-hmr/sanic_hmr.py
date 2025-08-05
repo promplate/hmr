@@ -78,7 +78,6 @@ def main(
     def start_server(app: "Sanic"):
         nonlocal stop_server
 
-
         import uvicorn
 
         finish = Event()
@@ -139,7 +138,7 @@ def main(
                 load(self.entry_module)
                 app_instance = getattr(self.entry_module, attr)
                 # Ensure it's a Sanic app
-                if not hasattr(app_instance, 'run'):
+                if not hasattr(app_instance, "run"):
                     secho(f"Attribute '{attr}' is not a Sanic app instance", fg="red")
                     exit(1)
                 start_server(app_instance)
