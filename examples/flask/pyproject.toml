@@ -4,8 +4,12 @@ version = "0"
 requires-python = ">=3.12"
 dependencies = [
     "flask~=3.1.0",
+    "flask-hmr",
     "hmr~=0.6.0",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+flask-hmr = { workspace = true }
