@@ -10,8 +10,8 @@ We haven't implement a separate integration for Sanic.
 So you need to use this function to start the server with HMR support.
 """
 
-from multiprocessing import Process
 from atexit import register, unregister
+from multiprocessing import Process
 from typing import cast
 
 from sanic import Sanic
@@ -24,13 +24,7 @@ class ServerProcess(Process):
 
     def run(self):
         # Run in a separate process to avoid signal conflicts
-        self.app.run(
-            host="localhost", 
-            port=8000, 
-            debug=False, 
-            auto_reload=False,
-            single_process=True
-        )
+        self.app.run(host="localhost", port=8000, debug=False, auto_reload=False, single_process=True)
 
     def shutdown(self):
         if self.is_alive():

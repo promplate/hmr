@@ -11,5 +11,5 @@ print("slow module a.py imported")
 
 
 @a.route("/")
-async def index(request):
+async def index(_):
     return json({"message": "Hello from a.py!"})

@@ -1,8 +1,9 @@
+import time
+
 from a import a
 from b import b
 from sanic import Sanic
 from sanic.response import json
-import time
 
 # Create a dynamic app name to avoid conflicts during HMR
 app_name = f"SanicExample_{int(time.time())}"
@@ -13,7 +14,7 @@ app.blueprint(b)
 
 
 @app.route("/")
-async def index(request):
+async def index(_):
     return json({"message": "Hello from main Sanic app!", "routes": ["/a", "/b", "/b/test"]})
 
 
