@@ -127,7 +127,7 @@ def main(
 
                 # Configure Flask app
                 if debug:
-                    flask_app.config['DEBUG'] = True
+                    flask_app.config["DEBUG"] = True
 
                 start_server(flask_app)
 
