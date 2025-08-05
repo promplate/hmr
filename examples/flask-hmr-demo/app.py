@@ -13,4 +13,4 @@ def status():
 if __name__ == "__main__":
     # Instead of app.run(), use flask-hmr:
     # flask-hmr app:app
-    app.run(debug=True)
+    app.run()
