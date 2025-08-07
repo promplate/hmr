@@ -1,17 +1,17 @@
 """Hot Module Replacement for Uvicorn."""
 
 import sys
+from atexit import register
 from functools import cached_property
 from importlib.machinery import ModuleSpec
 from logging import getLogger
 from pathlib import Path
 from threading import Event, Thread
-from typing import TYPE_CHECKING, override, Annotated
-from atexit import register
+from typing import TYPE_CHECKING, Annotated, override
 
 from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
 from reactivity.hmr.utils import load
-from typer import Typer, secho, Argument, Option
+from typer import Argument, Option, Typer, secho
 from uvicorn import Config, Server
 from watchfiles import Change
 
