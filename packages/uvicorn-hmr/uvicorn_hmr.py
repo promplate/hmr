@@ -28,7 +28,6 @@ def main(
 
     fragment = module.replace(".", "/")
 
-    file: Path | None
     is_package = False
     for path in ("", *sys.path):
         if (file := Path(path, f"{fragment}.py")).is_file():
@@ -38,13 +37,12 @@ def main(
             is_package = True
             break
     else:
-        file = None
-
-    if file is None:
         secho("Module", fg="red", nl=False)
         secho(f" {module} ", fg="yellow", nl=False)
         secho("not found.", fg="red")
         exit(1)
+
+    file = file.resolve()
 
     if module in sys.modules:
         return secho(
