@@ -45,7 +45,7 @@ def create_server():
     print("Tools: add_numbers, process_text")
     print("Resources: read_file")
     print("Server is running... (press Ctrl+C to stop)")
-    
+
     # In a real implementation, this would return an actual MCP server
     # For demo purposes, we'll just simulate a running server
     try:
