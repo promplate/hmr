@@ -1,0 +1,29 @@
+[project]
+name = "mcp-hmr"
+description = "Hot Module Reloading for Model Context Protocol (MCP) servers"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["mcp", "hot-reload", "hmr", "reload", "model-context-protocol"]
+authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
+license = "MIT"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "hmr>=0.5.0,<0.7",
+    "typer-slim>=0.15.4,<1",
+    "watchfiles<2,>=0.21",
+]
+
+[project.scripts]
+mcp-hmr = "mcp_hmr.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/promplate/hmr"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
