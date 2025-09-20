@@ -38,6 +38,11 @@ class MCPClient:
         if not self.process:
             raise RuntimeError("Server not started")
 
+        # Type assertion to help PyRight understand that self.process is not None
+        assert self.process is not None
+        assert self.process.stdin is not None
+        assert self.process.stdout is not None
+
         request = {"jsonrpc": "2.0", "id": self.get_next_id(), "method": method}
 
         if params:
@@ -62,11 +67,12 @@ class MCPClient:
     async def stop_server(self):
         """Stop the MCP server."""
         if self.process:
-            self.process.terminate()
+            process = self.process  # Store reference to avoid repeated attribute access
+            process.terminate()
             try:
-                await asyncio.wait_for(asyncio.get_event_loop().run_in_executor(None, self.process.wait), timeout=5.0)
+                await asyncio.wait_for(asyncio.get_event_loop().run_in_executor(None, process.wait), timeout=5.0)
             except TimeoutError:
-                self.process.kill()
+                process.kill()
             self.process = None
 
 
