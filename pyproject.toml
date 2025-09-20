@@ -6,6 +6,7 @@ dependencies = [
     "fastapi-reloader",
     "hmr~=0.6.0",
     "hmr-daemon",
+    "mcp-hmr",
     "ruff~=0.13.0",
     "uvicorn-hmr",
 ]
@@ -17,6 +18,7 @@ members = ["examples/*", "packages/*"]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }
 hmr-daemon = { workspace = true }
+mcp-hmr = { workspace = true }
 
 [tool.pyright]
 typeCheckingMode = "standard"
