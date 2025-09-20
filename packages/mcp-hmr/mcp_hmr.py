@@ -4,8 +4,8 @@ import asyncio
 import inspect
 import sys
 from atexit import register
-from functools import cached_property
 from collections.abc import Awaitable, Callable
+from functools import cached_property
 from importlib.machinery import ModuleSpec
 from logging import getLogger
 from pathlib import Path
