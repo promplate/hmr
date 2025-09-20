@@ -5,11 +5,12 @@ import inspect
 import sys
 from atexit import register
 from functools import cached_property
+from collections.abc import Awaitable, Callable
 from importlib.machinery import ModuleSpec
 from logging import getLogger
 from pathlib import Path
 from threading import Event, Thread
-from typing import TYPE_CHECKING, Annotated, Awaitable, Callable, override
+from typing import Annotated, override
 
 from typer import Argument, Option, Typer, secho
 
@@ -55,12 +56,11 @@ def main(
             fg="red",
         )
 
-    from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
+    from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__
     from reactivity.hmr.utils import load
     from watchfiles import Change
 
-    if TYPE_CHECKING:
-        ServerCallable = Callable[[], Awaitable[object] | object]
+    ServerCallable = Callable[[], Awaitable[object] | object]
 
     cwd = str(Path.cwd())
     if cwd not in sys.path:
@@ -109,10 +109,10 @@ def main(
         try:
             fut = asyncio.run_coroutine_threadsafe(_cancel(), loop)
             fut.result(timeout=2.0)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
-    def start_server(fn: "ServerCallable"):
+    def start_server(fn: ServerCallable):
         nonlocal current_task
 
         def _start() -> asyncio.Future:
@@ -128,7 +128,7 @@ def main(
                         raise TypeError("Entry callable must be or return an awaitable")
                 else:
                     raise TypeError("Entry callable must be or return an awaitable")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("Failed to start server: %s", exc)
                 raise
             # Accept any awaitable (not just coroutine) using ensure_future
@@ -148,7 +148,7 @@ def main(
             loop.call_soon_threadsafe(_cb)
             if not ready.wait(timeout=1.0):
                 raise TimeoutError("Timeout scheduling server task")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Failed to schedule server: %s", exc)
 
     class Reloader(SyncReloader):
