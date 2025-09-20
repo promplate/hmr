@@ -1,0 +1,29 @@
+[project]
+name = "mcp-hmr"
+description = "Hot Module Reloading runner for MCP-like Python servers"
+version = "0.0.1"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["mcp", "hmr", "reload", "devserver"]
+authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "hmr>=0.5.0,<0.8",
+    "typer-slim>=0.15.4,<1",
+]
+
+[project.scripts]
+mcp-hmr = "mcp_hmr:app"
+
+[project.urls]
+Homepage = "https://github.com/promplate/hmr"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
