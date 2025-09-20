@@ -19,4 +19,3 @@ async def serve() -> NoReturn:  # entry for `mcp-hmr`
             print(f"Response: {greet(line)}", flush=True)
     except asyncio.CancelledError:  # graceful cancellation on reload
         pass
-

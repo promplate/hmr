@@ -213,4 +213,3 @@ def _display_path(path: str | Path):
 
 if __name__ == "__main__":
     app()
-
