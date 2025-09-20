@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from typing import NoReturn
 
 from logic import greet
 
@@ -9,7 +8,7 @@ async def _readline() -> str:
     return await asyncio.to_thread(sys.stdin.readline)
 
 
-async def serve() -> NoReturn:  # entry for `mcp-hmr`
+async def serve() -> None:  # entry for `mcp-hmr`
     print("MCP demo server started. Type a name and press Enter (Ctrl+C to stop)", flush=True)
     try:
         while True:

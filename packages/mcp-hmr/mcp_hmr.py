@@ -14,6 +14,7 @@ from typing import Annotated, override
 
 from typer import Argument, Option, Typer, secho
 
+ServerCallable = Callable[[], Awaitable[object] | object]
 
 app = Typer(help="Hot Module Reloading for MCP-like async servers", add_completion=False, pretty_exceptions_show_locals=False)
 
@@ -60,7 +61,7 @@ def main(
     from reactivity.hmr.utils import load
     from watchfiles import Change
 
-    ServerCallable = Callable[[], Awaitable[object] | object]
+    # no local type aliases
 
     cwd = str(Path.cwd())
     if cwd not in sys.path:
@@ -69,7 +70,7 @@ def main(
     # Async server loop management
     loop = asyncio.new_event_loop()
     asyncio_thread_finished = Event()
-    current_task: asyncio.Task | None = None
+    current_task: asyncio.Future | None = None
 
     def _run_loop():
         try:
@@ -119,11 +120,11 @@ def main(
             try:
                 result = fn()
                 if inspect.isawaitable(result):
-                    awaitable_obj = result  # type: ignore[assignment]
+                    awaitable_obj: Awaitable[object] = result
                 elif callable(result):
-                    maybe = result()  # type: ignore[call-arg]
+                    maybe = result()
                     if inspect.isawaitable(maybe):
-                        awaitable_obj = maybe  # type: ignore[assignment]
+                        awaitable_obj = maybe
                     else:
                         raise TypeError("Entry callable must be or return an awaitable")
                 else:
