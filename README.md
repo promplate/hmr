@@ -54,13 +54,47 @@ So, why not bring this magic to Python?
 
 This might just be the first fine-grained HMR framework in the Python ecosystem—and honestly, I think the real magic lies in the ecosystem we build around it.
 
-Pair `uvicorn` + `hmr`, and you’ve got yourself a Vite-like development experience. Combine `pytest` + `hmr`, and you’re basically running Vitest for Python. The possibilities with other libraries? Endless. Let’s brainstorm together—who knows what fun (or mildly chaotic) things we might create!
+Pair `uvicorn` + `hmr`, and you've got yourself a Vite-like development experience. Combine `pytest` + `hmr`, and you're basically running Vitest for Python. We've also created `mcp-hmr` for hot reloading MCP (Model Context Protocol) servers! The possibilities with other libraries? Endless. Let's brainstorm together—who knows what fun (or mildly chaotic) things we might create!
 
 > [!TIP]
 > A little backstory: the code for hmr lives in [another repo](https://github.com/promplate/pyth-on-line/tree/main/packages/hmr) because, truth be told, I wasn’t planning on building an HMR framework. This started as an experiment in bringing reactive programming to Python. Along the way, I realized why not make a module’s globals [reactive](https://github.com/promplate/pyth-on-line/blob/hmr/v0.5.2.1/packages/hmr/reactivity/helpers.py#L80)? And that’s how hmr was born! While it began as a side project, I see tremendous potential in it.
 
 For now, this repo is a humble README and a place to kick off the conversation. If you think hmr has potential, or you just want to throw ideas around, I’d love to hear from you. We believe that the Python community can benefit from a more dynamic development experience, and we’re excited to see where this can take us!
 
+## Packages in this Workspace
+
+This workspace contains several HMR-related packages and examples:
+
+### Core Packages
+- **`packages/hmr-daemon/`** - HMR daemon for process management
+- **`packages/uvicorn-hmr/`** - Hot module reloading for Uvicorn servers
+- **`packages/fastapi-reloader/`** - Browser auto-refresh for FastAPI apps
+- **`packages/mcp-hmr/`** - Hot module reloading for MCP (Model Context Protocol) servers
+
+### Examples
+- **`examples/demo/`** - Basic HMR demonstration
+- **`examples/fastapi/`** - FastAPI with HMR example
+- **`examples/flask/`** - Flask with HMR example  
+- **`examples/mcp-demo/`** - MCP server with hot reloading
+
+### Getting Started with MCP-HMR
+
+If you're interested in the new MCP-HMR library:
+
+```bash
+# Install mcp-hmr
+cd packages/mcp-hmr && pip install -e .
+
+# Try the demo
+cd ../../examples/mcp-demo
+mcp-hmr server:main --clear
+
+# Test it (in another terminal)
+python3 client.py
+```
+
+See [`README-mcp-hmr.md`](README-mcp-hmr.md) for detailed MCP-HMR documentation.
+
 ## Further reading
 
-About fine-grained reactivity, I recommend reading [SolidJS’s excellent explanation](https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity).
+About fine-grained reactivity, I recommend reading [SolidJS's excellent explanation](https://docs.solidjs.com/advanced-concepts/fine-grained-reactivity).

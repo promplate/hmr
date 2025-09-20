@@ -1,0 +1,15 @@
+[project]
+name = "mcp-demo"
+description = "Demo MCP server for testing mcp-hmr"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.uv.sources]
+mcp-hmr = { workspace = true }
