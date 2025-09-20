@@ -1,9 +1,8 @@
+import asyncio
 import sys
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, override
-import asyncio
-import json
 
 from typer import Argument, Option, Typer, secho
 
@@ -15,12 +14,12 @@ def main(
     slug: Annotated[str, Argument(help="MCP server module and function (e.g., 'server:main' or 'server:app')")] = "server:main",
     reload_include: list[str] = [str(Path.cwd())],  # noqa: B006, B008
     reload_exclude: list[str] = [".venv", "__pycache__", "*.pyc"],  # noqa: B006
-    transport: Annotated[str, Option("--transport", help="Transport method: 'stdio' or 'sse'")] = "stdio",
+    transport: Annotated[str, Option("--transport", help="Transport method: 'stdio' or 'sse'")] = "stdio",  # noqa: ARG001
     clear: Annotated[bool, Option("--clear", help="Clear the terminal before restarting the server")] = False,  # noqa: FBT002
 ):
     """
     Start an MCP server with hot module reloading.
-    
+
     The slug should point to your MCP server function, e.g.:
     - server:main (calls main() function in server.py)
     - mypackage.server:run_server (calls run_server() in mypackage/server.py)
@@ -30,7 +29,7 @@ def main(
         secho(slug, fg="yellow")
         secho(" (should be in format 'module:function')", fg="red")
         exit(1)
-    
+
     module, attr = slug.split(":", 1)
 
     fragment = module.replace(".", "/")
@@ -61,7 +60,6 @@ def main(
     from importlib.machinery import ModuleSpec
     from logging import getLogger
     from threading import Event, Thread
-    import signal
 
     from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
     from reactivity.hmr.utils import load
@@ -94,7 +92,7 @@ def main(
             ignored_paths = [Path(p).resolve() for p in reloader.excludes]
             if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                 logger.error("No files to watch for changes. The server will never reload.")
-            
+
             try:
                 if asyncio.iscoroutinefunction(server_func):
                     # If it's an async function, run it in an event loop
@@ -190,15 +188,16 @@ def main(
 
     logger = getLogger("mcp.hmr")
     logger.setLevel("INFO")
-    
+
     # Set up console handler if not already present
     if not logger.handlers:
         import logging
+
         handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-    
+
     try:
         (reloader := Reloader()).keep_watching_until_interrupt()
     except KeyboardInterrupt:
