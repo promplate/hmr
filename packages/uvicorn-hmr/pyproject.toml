@@ -1,7 +1,7 @@
 [project]
 name = "uvicorn-hmr"
 description = "Hot Module Reloading for Uvicorn"
-version = "0.0.9.4"
+version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["uvicorn", "hot-reload", "hmr", "reload", "server"]
@@ -13,8 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dowhen~=0.1",
-    "hmr>=0.5.0,<0.8",
+    "hmr~=0.7.0",
     "typer-slim>=0.15.4,<1",
     "uvicorn>=0.24.0",
 ]

@@ -1,5 +1,5 @@
 import sys
-from functools import cached_property
+from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, override
 
@@ -32,13 +32,10 @@ def main(
 
     fragment = module.replace(".", "/")
 
-    is_package = False
     for path in ("", *sys.path):
         if (file := Path(path, f"{fragment}.py")).is_file():
-            is_package = False
             break
         if (file := Path(path, fragment, "__init__.py")).is_file():
-            is_package = True
             break
     else:
         secho("Module", fg="red", nl=False)
@@ -55,84 +52,61 @@ def main(
         )
 
     from atexit import register
-    from importlib.machinery import ModuleSpec
+    from importlib import import_module
     from logging import getLogger
     from threading import Event, Thread
 
-    from reactivity.hmr.core import ReactiveModule, ReactiveModuleLoader, SyncReloader, __version__, is_relative_to_any
-    from reactivity.hmr.utils import load
+    from reactivity.hmr.core import ReactiveModule, SyncReloader, is_relative_to_any
+    from reactivity.hmr.utils import on_dispose
     from uvicorn import Config, Server
     from watchfiles import Change
-
-    if TYPE_CHECKING:
-        from uvicorn._types import ASGIApplication
 
     cwd = str(Path.cwd())
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    @register
-    def _():
-        stop_server()
-
-    def stop_server():
-        pass
-
-    def start_server(app: "ASGIApplication"):
-        nonlocal stop_server
-
-        server = Server(Config(app, host, port, env_file=env_file, log_level=log_level))
-        finish = Event()
-
-        def run_server():
-            watched_paths = [Path(p).resolve() for p in (file, *reload_include)]
-            ignored_paths = [Path(p).resolve() for p in reloader.excludes]
-            if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
-                logger.error("No files to watch for changes. The server will never reload.")
-            server.run()
-            finish.set()
-
-        Thread(target=run_server, daemon=True).start()
-
-        def stop_server():
-            if refresh:
-                _try_reload()
-            server.should_exit = True
-            try:
-                finish.wait()
-            except KeyboardInterrupt:
-                server.force_exit = True
-
     class Reloader(SyncReloader):
         def __init__(self):
-            super().__init__(str(file), reload_include, reload_exclude)
+            super().__init__(str(file), [str(file), *reload_include], reload_exclude)
             self.error_filter.exclude_filenames.add(__file__)  # exclude error stacks within this file
+            register(lambda: self.stop_server())
 
-        @cached_property
-        @override
-        def entry_module(self):
-            if "." in module:
-                __import__(module.rsplit(".", 1)[0])  # ensure parent modules are imported
-
-            if __version__ >= "0.6.4":
-                from reactivity.hmr.core import _loader as loader
-            else:
-                loader = ReactiveModuleLoader(file)  # type: ignore
-
-            spec = ModuleSpec(module, loader, origin=str(file), is_package=is_package)
-            sys.modules[module] = mod = loader.create_module(spec)
-            loader.exec_module(mod)
-            return mod
+        def stop_server(self):
+            pass
 
         @override
         def run_entry_file(self):
-            stop_server()
+            self.stop_server()
             with self.error_filter:
-                load(self.entry_module)
-                app = getattr(self.entry_module, attr)
+                app = getattr(import_module(module), attr)
                 if refresh:
-                    app: ASGIApplication = _try_patch(app)  # type: ignore
-                start_server(app)
+                    app = _try_patch(app)
+
+                server = Server(Config(app, host, port, env_file=env_file, log_level=log_level))
+
+                finish = Event()
+
+                def run_server():
+                    watched_paths = [Path(p).resolve() for p in self.includes]
+                    ignored_paths = [Path(p).resolve() for p in self.excludes]
+                    if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
+                        logger.error("No files to watch for changes. The server will never reload.")
+                    server.run()
+                    finish.set()
+
+                Thread(target=run_server, daemon=True).start()
+
+                def stop_server():
+                    logger.warning("Application '%s' has changed. Restarting server...", slug)
+                    if refresh:
+                        _try_reload()
+                    server.should_exit = True
+                    try:
+                        finish.wait()
+                    except KeyboardInterrupt:
+                        server.force_exit = True
+
+                self.stop_server = stop_server
 
         @override
         def on_events(self, events):
@@ -150,26 +124,20 @@ def main(
                 logger.warning("Watchfiles detected changes in %s. Reloading...", ", ".join(map(_display_path, paths)))
             return super().on_events(events)
 
-        @override
-        def start_watching(self):
-            from dowhen import when
+    __load = ReactiveModule.__load if TYPE_CHECKING else ReactiveModule._ReactiveModule__load  # noqa: SLF001
 
-            def log_server_restart():
-                logger.warning("Application '%s' has changed. Restarting server...", slug)
+    @wraps(original_load := __load.method)
+    def patched_load(self: ReactiveModule, *args, **kwargs):
+        original_load(self, *args, **kwargs)
+        file: Path = self._ReactiveModule__file  # type: ignore
+        on_dispose(lambda: logger.info("Reloading module '%s' from %s", self.__name__, _display_path(file)), str(file))
 
-            def log_module_reload(self: ReactiveModule):
-                ns = self.__dict__
-                logger.info("Reloading module '%s' from %s", ns["__name__"], _display_path(ns["__file__"]))
-
-            with (
-                when(ReactiveModule._ReactiveModule__load.method, "<start>").do(log_module_reload),  # type: ignore  # noqa: SLF001
-                when(self.run_entry_file, "<start>").do(log_server_restart),
-            ):
-                return super().start_watching()
+    __load.method = patched_load
 
     logger = getLogger("uvicorn.error")
-    (reloader := Reloader()).keep_watching_until_interrupt()
-    stop_server()
+    Reloader().keep_watching_until_interrupt()
+
+    __load.method = original_load
 
 
 def _display_path(path: str | Path):
