@@ -6,7 +6,7 @@ dependencies = [
     "fastapi-reloader",
     "hmr~=0.7.0",
     "hmr-daemon",
-    "ruff~=0.13.0",
+    "ruff~=0.14.0",
     "uvicorn-hmr",
 ]
 
