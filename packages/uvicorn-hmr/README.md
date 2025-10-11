@@ -27,6 +27,9 @@ Since the python module reloading is on-demand and the server is not restarted o
    - Decorators still work, even meta programming hacks like `getsource` calls work too
    - Standard dunder metadata like `__name__`, `__doc__`, `__file__`, `__package__` are correctly set
    - ASGI lifecycles are preserved
+6. We did some elegant engineering to optimize UX and performance of `uvicorn`:
+   - Since the reloader and the server stay in the same thread, we can gracefully wait for the server to shutdown before reloading, which avoids long weird tracebacks that you will see when you keep pressing save during `uvicorn --reload`.
+   - `uvicorn`'s main loop has a 100ms tick interval, we optimized it into an event-driven model, so the server can respond to shutdown calls instantly!
 
 Normally, you can replace `uvicorn --reload` with `uvicorn-hmr` and everything will work as expected, with a much faster refresh experience.
 

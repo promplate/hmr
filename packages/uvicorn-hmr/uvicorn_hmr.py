@@ -1,5 +1,7 @@
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from time import time
 from typing import TYPE_CHECKING, Annotated, override
 
 from typer import Argument, Option, Typer, secho
@@ -50,12 +52,13 @@ def main(
             fg="red",
         )
 
-    from asyncio import Event, ensure_future, run
+    from asyncio import FIRST_COMPLETED, Event, Future, ensure_future, run, sleep, wait
     from functools import cache, wraps
     from importlib import import_module
     from logging import getLogger
     from signal import SIGINT
 
+    from reactivity import state
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, ReactiveModule, is_relative_to_any
     from reactivity.hmr.fs import fs_signals
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
@@ -125,11 +128,24 @@ def main(
 
     main_loop_started = Event()
 
+    def until(func: Callable[[], bool]):
+        future = Future()
+
+        @HMR_CONTEXT.effect
+        def check():
+            if func():
+                future.set_result(None)
+                check.dispose()
+
+        return future
+
     @cache
     def lazy_import_from_uvicorn():
         from uvicorn import Config, Server
 
         class _Server(Server):
+            should_exit = state(False, context=HMR_CONTEXT)  # noqa: FBT003
+
             def handle_exit(self, sig, frame):
                 if self.force_exit and sig == SIGINT:
                     raise KeyboardInterrupt  # allow immediate shutdown on third interrupt
@@ -137,7 +153,17 @@ def main(
 
             async def main_loop(self):
                 main_loop_started.set()
-                return await super().main_loop()
+                if self.on_tick(0):
+                    return
+
+                async def ticking():
+                    counter = 10
+                    while not self.should_exit:
+                        await sleep(1 - time() % 1)
+                        self.should_exit = await self.on_tick(counter)
+                        counter += 10
+
+                await wait((until(lambda: self.should_exit), ensure_future(ticking())), return_when=FIRST_COMPLETED)
 
             if refresh:
 
