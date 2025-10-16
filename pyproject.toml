@@ -8,6 +8,7 @@ dependencies = [
     "hmr-daemon",
     "ruff~=0.14.0",
     "uvicorn-hmr",
+    "hypercorn-hmr",
 ]
 
 [tool.uv.workspace]
@@ -17,6 +18,7 @@ members = ["examples/*", "packages/*"]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }
 hmr-daemon = { workspace = true }
+hypercorn-hmr = { workspace = true }
 
 [tool.pyright]
 typeCheckingMode = "standard"
