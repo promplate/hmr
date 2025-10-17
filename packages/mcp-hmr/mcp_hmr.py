@@ -25,12 +25,13 @@ async def run_with_hmr(target: str):
         try:
             yield
         finally:  # unmount
-            for mounted_server in base_app._mounted_servers:  # noqa: SLF001
+            for mounted_server in list(base_app._mounted_servers):  # noqa: SLF001
                 if mounted_server.server is proxy:
                     base_app._mounted_servers.remove(mounted_server)  # noqa: SLF001
                     base_app._tool_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
                     base_app._resource_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
                     base_app._prompt_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                    break
 
     lock = Lock()
 
