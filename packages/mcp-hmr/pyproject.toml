@@ -1,0 +1,33 @@
+[project]
+name = "mcp-hmr"
+description = "Hot Reloading for MCP Servers"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["mcp", "hot-reload", "hmr", "reload", "server"]
+authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
+license = "MIT"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastmcp>=2.2.0,<3",
+    "hmr~=0.7.0",
+]
+dynamic = ["version"]
+
+[tool.pdm.version]
+source = "file"
+path = "mcp_hmr.py"
+
+[project.scripts]
+mcp-hmr = "mcp_hmr:cli"
+
+[project.urls]
+Homepage = "https://github.com/promplate/hmr"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
