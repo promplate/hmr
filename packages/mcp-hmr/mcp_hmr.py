@@ -97,7 +97,7 @@ def cli(argv: list[str] = sys.argv[1:]):
     target: str = args.target
 
     if target.count(":") != 1 or target.startswith(":") or target.endswith(":"):
-        parser.exit(1, f"The target argument must be in the format 'module:attr', e.g. 'main:app'. Got: '{args.target}'")
+        parser.exit(1, f"The target argument must be in the format 'module:attr', e.g. 'main:app'. Got: '{target}'")
 
     from asyncio import run
     from contextlib import suppress
