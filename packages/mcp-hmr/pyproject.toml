@@ -5,7 +5,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["mcp", "hot-reload", "hmr", "reload", "server"]
 authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
-license = "MIT"
+license = { text = "MIT" }
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
