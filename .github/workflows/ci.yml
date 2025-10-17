@@ -43,6 +43,7 @@ jobs:
           - uvicorn-hmr
           - fastapi-reloader
           - hmr-daemon
+          - mcp-hmr
       fail-fast: false
     needs: [typos, check]
     permissions:
