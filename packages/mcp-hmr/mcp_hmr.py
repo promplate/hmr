@@ -17,7 +17,7 @@ async def run_with_hmr(target: str):
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
-    base_app = FastMCP(include_fastmcp_meta=False)
+    base_app = FastMCP(name="proxy", include_fastmcp_meta=False)
 
     @contextmanager
     def mount(app: FastMCP | mcp.server.FastMCP):
