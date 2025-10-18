@@ -3,7 +3,7 @@ import sys
 __version__ = "0.0.1"
 
 
-async def run_with_hmr(target: str):
+async def run_with_hmr(target: str, log_level: str | None = None):
     module, attr = target.split(":")
 
     from asyncio import Event, Lock, create_task
@@ -79,7 +79,7 @@ async def run_with_hmr(target: str):
             await self.reloader_task
 
     async with Reloader():
-        await base_app.run_stdio_async(show_banner=False)
+        await base_app.run_stdio_async(show_banner=False, log_level=log_level)
 
 
 def cli(argv: list[str] = sys.argv[1:]):
@@ -87,6 +87,7 @@ def cli(argv: list[str] = sys.argv[1:]):
 
     parser = ArgumentParser(prog="mcp-hmr", description="Hot Reloading for MCP Servers • Automatically reload on code changes")
     parser.add_argument("target", help="The import path of the FastMCP instance, e.g. `main:app` means `from main import app`", metavar="module:attr")
+    parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], type=str.upper, default=None)
     parser.add_argument("--version", action="version", version=f"mcp-hmr {__version__}", help=SUPPRESS)
 
     if not argv:
@@ -108,7 +109,7 @@ def cli(argv: list[str] = sys.argv[1:]):
         sys.path.append(cwd)
 
     with suppress(KeyboardInterrupt):
-        run(run_with_hmr(args.target))
+        run(run_with_hmr(target, args.log_level))
 
 
 if __name__ == "__main__":
