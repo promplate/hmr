@@ -6,11 +6,11 @@ __version__ = "0.0.1"
 async def run_with_hmr(target: str, log_level: str | None = None):
     module, attr = target.split(":")
 
-    from asyncio import Event, Lock, TaskGroup
     from contextlib import contextmanager
     from importlib import import_module
 
     import mcp.server
+    from anyio import Event, Lock, create_task_group
     from fastmcp import FastMCP
     from fastmcp.server.proxy import ProxyClient
     from reactivity import async_effect, derived
@@ -58,12 +58,13 @@ async def run_with_hmr(target: str, log_level: str | None = None):
 
         app = get_app()
 
-        tg.create_task(using(app, stop_event := Event(), finish_event := Event()))
+        tg.start_soon(using, app, stop_event := Event(), finish_event := Event())
 
     class Reloader(AsyncReloader):
         def __init__(self):
             super().__init__("")
             self.error_filter.exclude_filenames.add(__file__)
+            self._stop_event = Event()  # patch the original implementation because it assumes `asyncio` is used  # type: ignore
 
         async def __aenter__(self):
             call_pre_reload_hooks()
@@ -71,7 +72,7 @@ async def run_with_hmr(target: str, log_level: str | None = None):
                 await main()
             finally:
                 call_post_reload_hooks()
-                tg.create_task(self.start_watching())
+                tg.start_soon(self.start_watching)
 
         async def __aexit__(self, *_):
             self.stop_watching()
@@ -79,7 +80,7 @@ async def run_with_hmr(target: str, log_level: str | None = None):
             if stop_event:
                 stop_event.set()
 
-    async with TaskGroup() as tg, Reloader():
+    async with create_task_group() as tg, Reloader():
         await base_app.run_stdio_async(show_banner=False, log_level=log_level)
 
 
@@ -102,15 +103,16 @@ def cli(argv: list[str] = sys.argv[1:]):
     if target.count(":") != 1 or target.startswith(":") or target.endswith(":"):
         parser.exit(1, f"The target argument must be in the format 'module:attr', e.g. 'main:app'. Got: '{target}'")
 
-    from asyncio import run
     from contextlib import suppress
     from pathlib import Path
+
+    from anyio import run
 
     if (cwd := str(Path.cwd())) not in sys.path:
         sys.path.append(cwd)
 
     with suppress(KeyboardInterrupt):
-        run(run_with_hmr(target, args.log_level))
+        run(run_with_hmr, target, args.log_level, backend="trio")
 
 
 if __name__ == "__main__":
