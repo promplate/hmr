@@ -12,15 +12,16 @@ jobs:
   check:
     strategy:
       matrix:
-        os: [ubuntu, macos]
+        os: [ubuntu, macos, windows]
+        py: ["3.12", "3.13", "3.14"]
       fail-fast: false
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.py }}
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: 3.13
+          python-version: ${{ matrix.py }}
           activate-environment: true
       - name: Install dependencies
         run: |
@@ -55,14 +56,14 @@ jobs:
       - name: Set up Python
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: 3.13
+          python-version: 3.14
       - name: Remove admonitions from READMEs
         run: |
           find . -type f -name "README.md" -exec sed -i -E '/^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/d' {} +
       - name: Remove all noqa comments
         run: |
           uvx ruff check --select RUF100 --show-fixes --fix packages/${{ matrix.dir }}
-      - name: Build packages
+      - name: Build wheel for ${{ matrix.dir }}
         run: |
           uv build packages/${{ matrix.dir }} --wheel
       - name: Publish to PyPI

@@ -1,14 +1,14 @@
 [project]
-name = "fastapi-example"
+name = "mcp-example"
 version = "0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi~=0.120.0",
-    "uvicorn-hmr[all]",
+    "fastmcp~=2.12.5",
+    "mcp-hmr",
 ]
 
 [tool.uv]
 package = false
 
 [tool.uv.sources]
-uvicorn-hmr = { workspace = true }
+mcp-hmr = { workspace = true }

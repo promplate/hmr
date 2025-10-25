@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "main": {
+      "command": "mcp-hmr",
+      "args": ["main.py:app"]
+    }
+  }
+}

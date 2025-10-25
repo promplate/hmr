@@ -36,11 +36,29 @@ If you have `uv` installed, you can try `hmr` directly with:
 uvx hmr path/to/your/entry-file.py
 ```
 
+## Ecosystem
+
+HMR provides a rich ecosystem of tools for different Python development scenarios:
+
+| Package                                            | Use Case                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| [`hmr`][repo]                                      | Reactive programming lib and HMR core implementation         |
+| [`uvicorn-hmr`](./packages/uvicorn-hmr/)           | HMR-enabled Uvicorn server for ASGI apps                     |
+| [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                            |
+| [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes modules on changes          |
+| [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading |
+
 > [!TIP]
-> The hmr ecosystem is now production-ready. It has been carefully designed to handle many common edge cases and Pythonic *magic* patterns, including lazy imports, circular dependencies, dynamic imports, module-level `__getattr__`, decorators, and more. You can confidently use hmr in production environments if needed.
+> The hmr ecosystem is basically stable and production-ready for most use cases. It has been carefully designed to handle many common edge cases and Pythonic *magic* patterns, including lazy imports, dynamic imports, module-level `__getattr__`, decorators, and more. However, circular dependencies in some edge cases may still cause unexpected behavior. Use with caution if you have a lot of code in `__init__.py`.
 
 https://github.com/user-attachments/assets/fb247649-193d-4eed-b778-05b02d47c3f6
 
+## Other demos
+
+- [`demo/`](./examples/demo/) - Basic script with hot module reloading
+- [`fastapi/`](./examples/fastapi/) - FastAPI server with hot reloading and browser refresh
+- [`flask/`](./examples/flask/) - Flask app with hot module reloading
+- [`mcp/`](./examples/mcp/) - MCP server with live code updates without connection drops
 
 ## Motivation
 

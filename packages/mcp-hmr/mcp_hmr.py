@@ -1,20 +1,23 @@
 import sys
+from importlib import import_module
+from importlib.machinery import ModuleSpec
+from importlib.util import find_spec, module_from_spec
+from pathlib import Path
 
-__version__ = "0.0.1"
+__version__ = "0.0.2.3"
 
 
 async def run_with_hmr(target: str, log_level: str | None = None):
-    module, attr = target.split(":")
+    module, attr = target.rsplit(":", 1)
 
-    from contextlib import contextmanager
-    from importlib import import_module
+    from contextlib import contextmanager, suppress
 
     import mcp.server
     from anyio import Event, Lock, create_task_group
     from fastmcp import FastMCP
     from fastmcp.server.proxy import ProxyClient
     from reactivity import async_effect, derived
-    from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader
+    from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, _loader
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
     base_app = FastMCP(name="proxy", include_fastmcp_meta=False)
@@ -28,9 +31,10 @@ async def run_with_hmr(target: str, log_level: str | None = None):
             for mounted_server in list(base_app._mounted_servers):  # noqa: SLF001
                 if mounted_server.server is proxy:
                     base_app._mounted_servers.remove(mounted_server)  # noqa: SLF001
-                    base_app._tool_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
-                    base_app._resource_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
-                    base_app._prompt_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                    with suppress(AttributeError):
+                        base_app._tool_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                        base_app._resource_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                        base_app._prompt_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
                     break
 
     lock = Lock()
@@ -41,9 +45,17 @@ async def run_with_hmr(target: str, log_level: str | None = None):
                 await stop_event.wait()
                 finish_event.set()
 
-    @derived(context=HMR_CONTEXT)
-    def get_app():
-        return getattr(import_module(module), attr)
+    if Path(module).is_file():  # module:attr
+
+        @derived(context=HMR_CONTEXT)
+        def get_app():
+            return getattr(module_from_spec(ModuleSpec("server_module", _loader, origin=module)), attr)
+
+    else:  # path:attr
+
+        @derived(context=HMR_CONTEXT)
+        def get_app():
+            return getattr(import_module(module), attr)
 
     stop_event: Event | None = None
     finish_event: Event = ...  # type: ignore
@@ -87,8 +99,10 @@ async def run_with_hmr(target: str, log_level: str | None = None):
 def cli(argv: list[str] = sys.argv[1:]):
     from argparse import SUPPRESS, ArgumentParser
 
-    parser = ArgumentParser(prog="mcp-hmr", description="Hot Reloading for MCP Servers • Automatically reload on code changes")
-    parser.add_argument("target", help="The import path of the FastMCP instance, e.g. `main:app` means `from main import app`", metavar="module:attr")
+    parser = ArgumentParser("mcp-hmr", description="Hot Reloading for MCP Servers • Automatically reload on code changes")
+    if sys.version_info >= (3, 14):
+        parser.suggest_on_error = True
+    parser.add_argument("target", help="The import path of the FastMCP instance. Supports module:attr and path:attr")
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], type=str.upper, default=None)
     parser.add_argument("--version", action="version", version=f"mcp-hmr {__version__}", help=SUPPRESS)
 
@@ -100,16 +114,26 @@ def cli(argv: list[str] = sys.argv[1:]):
 
     target: str = args.target
 
-    if target.count(":") != 1 or target.startswith(":") or target.endswith(":"):
-        parser.exit(1, f"The target argument must be in the format 'module:attr', e.g. 'main:app'. Got: '{target}'")
+    if ":" not in target[1:-1]:
+        parser.exit(1, f"The target argument must be in the format 'module:attr' (e.g. 'main:app') or 'path:attr' (e.g. './path/to/main.py:app'). Got: '{target}'")
 
     from contextlib import suppress
-    from pathlib import Path
 
     from anyio import run
 
     if (cwd := str(Path.cwd())) not in sys.path:
         sys.path.append(cwd)
+
+    if (file := Path(module_or_path := target[: target.rindex(":")])).is_file():
+        sys.path.insert(0, str(file.parent))
+    else:
+        if "." in module_or_path:  # find_spec may cause implicit imports of parent packages
+            from reactivity.hmr.core import patch_meta_path
+
+            patch_meta_path()
+
+        if find_spec(module_or_path) is None:
+            parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
     with suppress(KeyboardInterrupt):
         run(run_with_hmr, target, args.log_level, backend="trio")
