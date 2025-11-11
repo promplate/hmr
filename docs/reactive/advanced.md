@@ -1,139 +1,83 @@
 # Advanced Reactivity
 
-Master advanced reactive programming patterns and optimization techniques.
+HMR uses **push-pull reactivity**: signals push notifications when updated, but derived values are lazy and only recompute when read (pulled) or when a hard puller (like an effect) forces evaluation.
 
-## Push-Pull Reactivity
-
-HMR implements push-pull reactivity, combining the best of both worlds:
-
-**Push Style (Eager):** Subscribables notify subscribers immediately. Can cause unnecessary recalculations. Low latency for immediate reactions.
-
-**Pull Style (Lazy):** Computations pull values when needed. Avoids unnecessary recalculations. Higher latency for initial results.
-
-**Push-Pull Hybrid:** Subscribables push notifications (eager). Computations defer unless pulled by effects (lazy). Best of both: no waste + low latency.
-
-HMR uses this approach automatically.
-
-## Batch Updates
-
-Combine multiple updates into a single notification:
+## Core primitives
 
 ```python
-from reactivity import signal, effect, batch
-
-count = signal(0)
-name = signal("test")
-
-effect(lambda: print(f"{name.get()}: {count.get()}"))
-
-with batch():
-    count.set(2)
-    name.set("batch")
+from reactivity import signal, state, effect, derived, memoized, batch, new_context, reactive
 ```
 
-## Memoization
+- [`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) / [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): observables
+- [`effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): side effects
+- [`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): lazy computed
+- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): cached with hard pull
+- [`batch`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): group updates
+- [`new_context`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/context.py): isolated environment
+- [`reactive`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py): reactive containers
 
-Cache computed results to avoid recalculation:
+## Patterns
+
+### 1. Stable resources
+
+Keep DB clients, ML models, sockets in modules you rarely edit or behind factories.
+
+### 2. Derived for computed values
 
 ```python
-from reactivity import memoized
+s = signal(1)
+square = derived(lambda: s.get() ** 2)  # lazy
+```
 
+### 3. Effect for side effects
+
+```python
+@effect
+def logger():
+    print(square())
+```
+
+### 4. Memoized for expensive calls
+
+```python
 @memoized
-def expensive_operation():
-    print("Computing...")
+def expensive():
     return sum(range(1_000_000))
-
-result = expensive_operation()
 ```
 
-## Dynamic Dependencies
-
-Dependencies can change based on runtime conditions:
+### 5. Batch updates
 
 ```python
-from reactivity import signal, derived
+a = signal(0)
+b = signal(0)
 
-mode = signal("sum")
-values = signal([1, 2, 3])
-
-result = derived(lambda: (
-    sum(values.get()) if mode.get() == "sum"
-    else max(values.get()) if mode.get() == "max"
-    else len(values.get())
-))
-
-mode.set("max")
-```
-
-## Context Isolation
-
-Use contexts to manage reactive scope:
-
-```python
-from reactivity import new_context, signal, effect
-
-ctx = new_context()
-count = ctx.signal(0)
-ctx.effect(lambda: print(count.get()))
-```
-
-Use cases: Testing reactive code, multiple independent reactive systems, module isolation in HMR.
-
-## Best Practices
-
-### 1. Keep Derived Values Pure
-
-Good - no side effects:
-
-```python
-squared = derived(lambda: count.get() ** 2)
-```
-
-Use effect for side effects instead:
-
-```python
-effect(lambda: print(f"Count: {count.get()}"))
-```
-
-### 2. Minimize Effect Scope
-
-Good - focused effect:
-
-```python
-full_name = derived(lambda: f"{first_name.get()} {last_name.get()}")
-effect(lambda: print(full_name.get()))
-```
-
-### 3. Use Batch for Related Updates
-
-Good - batch updates:
-
-```python
 with batch():
-    form_data.set({**form_data.get(), "name": "John"})
-    form_data.set({**form_data.get(), "email": "john@example.com"})
+    a.set(a.get() + 1)
+    b.set(b.get() + 2)
 ```
 
-### 4. Prefer Immutability
-
-Good - signals with immutable values:
+### 6. Context isolation
 
 ```python
-items = signal([])
-items.set([*items.get(), "new_item"])
+ctx = new_context()
+s = signal(0, context=ctx)
+@effect(context=ctx)
+def _():
+    print(s.get())
 ```
 
-### 5. Clean Up Resources
+### 7. Reactive containers
 
-```python
-effect_ref = effect(lambda: setup_listener())
-effect_ref.dispose()
-```
+[`reactive()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py) creates reactive dicts, sets, lists, or object proxies with per-key/index tracking.
 
-## Next Steps
+## Async
 
-- Review [Performance Tips](../getting-started/quick-start.md)
-- Explore [HMR Integrations](../integrations/demo.md)
-- Try [MCP Integration](../integrations/mcp.md) with AI
+[`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) support asyncio/trio via pluggable task factories.
 
-Learn more: [Signals](./signals.md) | [Effects](./effects.md) | [Derived Values](./derived.md)
+## Best practices
+
+- Keep heavy init in stable modules or factories
+- Prefer derived/memoized over manual caching
+- Batch related updates
+- Use `new_context()` for isolated subsystems
+- Restart for C extensions or global state changes

@@ -1,74 +1,88 @@
 # Quick Start
 
-Get your first HMR experience in minutes.
+Let's create a simple example to see HMR in action.
 
-## Using the CLI
+## 1. Create a file
 
-Replace `python` with `hmr` when running your script:
-
-```sh
-hmr app.py
-```
-
-Or with arguments:
-
-```sh
-hmr app.py --debug --port 8000
-```
-
-That's it! Your module now has hot reloading. Try editing `app.py` and watch the changes apply instantly.
-
-## Running Modules
-
-Like `python -m`:
-
-```sh
-hmr -m mypackage
-```
-
-## With ASGI Frameworks
-
-If using FastAPI, Starlette, or other ASGI frameworks:
-
-```sh
-pip install uvicorn-hmr[all]
-uvicorn-hmr main:app --reload
-```
-
-Or with Flask (via embedded server):
-
-```sh
-pip install fastapi-reloader
-python app.py
-```
-
-## Using the Reactive API
-
-For advanced use cases, use reactive primitives directly:
+Create `main.py`:
 
 ```python
-from reactivity import signal, effect, derived
+# main.py
+import time
 
-# Create a reactive signal
-count = signal(0)
-
-# Define a computed value
-doubled = derived(lambda: count.get() * 2)
-
-# Set up an effect
-effect(lambda: print(f"Count: {count.get()}"))
-
-# Update the signal
-count.set(1)  # Prints: Count: 1
-print(doubled.get())  # Prints: 2
+i = 0
+while True:
+    i += 1
+    print(f"Hello, World! {i}")
+    time.sleep(1)
 ```
 
-Learn more in [Reactive Programming](../reactive/signals.md).
+## 2. Run with HMR
 
-## Troubleshooting
+```sh
+hmr main.py
+```
 
-- **Changes not reflecting?** Make sure you're editing files that `hmr` is tracking. See [CLI Reference](./cli.md) for include/exclude options.
-- **Circular imports?** See [Troubleshooting](../reference/troubleshooting.md).
-- **Need more control?** Check [Advanced Reactivity](../reactive/advanced.md).
+You should see:
 
-Next: Explore [Reactive Programming](../reactive/signals.md) or jump to [HMR Integrations](../integrations/uvicorn.md).
+```text
+Hello, World! 1
+Hello, World! 2
+Hello, World! 3
+...
+```
+
+## 3. Edit and watch it reload
+
+Without stopping the script, change the print statement:
+
+```python
+# main.py
+import time
+
+i = 0
+while True:
+    i += 1
+    print(f"HMR is amazing! {i}")  # Changed this line
+    time.sleep(1)
+```
+
+Save the file. The output changes instantly:
+
+```text
+...
+Hello, World! 5
+HMR is amazing! 6
+HMR is amazing! 7
+...
+```
+
+Notice that `i` continued from where it was. The process didn't restart—only the changed code was reloaded. This is the power of HMR: instant updates with preserved state.
+
+## Framework Examples
+
+**FastAPI/ASGI apps:**
+
+```sh
+pip install uvicorn-hmr
+uvicorn-hmr main:app
+```
+
+**Flask apps:**
+
+```sh
+hmr start.py  # where start.py creates and runs your Flask app
+```
+
+**MCP servers:**
+
+```sh
+pip install mcp-hmr
+mcp-hmr server:app
+```
+
+## Next Steps
+
+- Explore [reactive primitives](../reactive/signals.md) for building reactive applications
+- Read [integration guides](../integrations/uvicorn.md) for framework-specific patterns
+- Check [advanced patterns](../reactive/advanced.md) for best practices

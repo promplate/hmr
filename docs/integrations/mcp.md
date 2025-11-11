@@ -1,71 +1,65 @@
-# MCP Server
+# MCP Integration (mcp-hmr)
 
-Use HMR with the MCP (Model Context Protocol) server for AI-powered development assistance.
+This page explains how to run Model Context Protocol (MCP) servers with hot reload and what to expect.
 
-## Installation
+Quick summary
+
+- Use mcp-hmr to run MCP servers without reconnecting clients on most code edits.
+- The reactivity layer reloads changed modules and notifies dependent code; long-lived connections and resources are preserved when possible.
+- For complex protocol/state changes or C-level state, prefer a full restart.
+
+Install
 
 ```sh
 pip install mcp-hmr
 ```
 
-## Overview
+Run a server
 
-The `mcp-hmr` package integrates HMR with Claude's Model Context Protocol, allowing AI assistants to understand and work with your Python code.
-
-## Setup
-
-1. Configure your MCP settings to use `mcp-hmr`
-2. Start your development server
-3. Claude can now access your code's reactive state and module graph
-
-## Key Features
-
-- **Code awareness**: Claude understands your module dependencies
-- **Reactive context**: AI agents see your signal/effect/derived state
-- **Live updates**: Changes are reflected in real-time
-- **State inspection**: AI can query module globals and state
-
-## How It Works
-
-When you run HMR with MCP enabled:
-
-1. HMR tracks module dependencies and state changes
-2. MCP server exposes this information to Claude
-3. Claude can provide better suggestions based on actual runtime state
-4. Changes you make are immediately visible to the AI
-
-## Example Workflow
-
-```text
-1. You run: hmr main.py
-2. HMR tracks changes and module graph
-3. MCP server starts (if enabled)
-4. Claude can query your code:
-   - "What modules import this function?"
-   - "Show me all signals in the current scope"
-   - "What changed when I edited this file?"
-5. You get context-aware suggestions
+```sh
+python -m mcp_hmr main:app
+# or if the package exposes a CLI entry:
+mcp-hmr main:app
 ```
 
-## Configuration
+Notes on behavior
 
-See `examples/mcp/` for configuration examples and setup instructions.
+- The running MCP server keeps existing connections. When a changed module updates tools/resources, the server replaces the implementation in-place and the next tool invocation uses the new code.
+- Keep explicit teardown/setup hooks for resources that must be reinitialized on reload. Use hmr hooks (pre_reload/post_reload) where provided by the HMR API to unregister or re-register resources.
+- Avoid mutating protocol wire formats at runtime; changes to RPC signatures or resource schemas may require coordinated client updates or a restart.
 
-## Using with Claude
+Recommended patterns
 
-When Claude has access to your MCP server, you can:
+- Put heavy, stateful initialization (database pools, ML models) into modules you rarely edit, or expose a factory so you can re-create on demand.
+- Use small, pure functions for tools/resources whenever possible; swapping pure functions is safer at runtime.
+- Add idempotent registration for tools/resources so reloads do not double-register them.
 
-- Ask about your code structure
-- Get refactoring suggestions based on actual dependencies
-- Debug issues with AI assistance
-- Get explanations of how HMR affects your code
+Example: simple server structure
 
-## Examples
+```python
+# main.py
+from fastmcp import Server
+from my_app import tools  # keep tools small and pure
 
-See `examples/mcp/` for:
+server = Server()
+server.register_tool("echo", tools.echo)
+server.serve()
+```
 
-- `main.py`: Example MCP server setup
-- `client.py`: MCP client implementation
-- `mcp.json`: Configuration file
+On code change
 
-Learn more: [Flask Integration](./flask.md) | [Reactive Primitives](../reactive/signals.md) | [ASGI Integration](./uvicorn.md)
+- Edit `my_app/tools.py` and save.
+- HMR reloads the module and updates the server's tool binding if it was wired via module-level imports or registration hooks.
+
+Debugging and caveats
+
+- If clients observe inconsistent behavior after a reload, check for:
+  - global mutable state that wasn't migrated
+  - double-registration of tools or hooks
+  - changes in serialization / argument formats
+- For protocol-level & breaking changes, schedule a controlled deploy and restart.
+
+See also
+
+- `docs/getting-started/quick-start.md`
+- `docs/reactive/advanced.md` for recommended reactive patterns

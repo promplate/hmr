@@ -1,18 +1,14 @@
-# Demo Project
+# Demo — minimal HMR example
 
-The demo project in `examples/demo/` showcases HMR capabilities with a minimal, pure Python setup.
+A tiny, framework-free demo that shows HMR behavior with plain Python modules.
 
-## Project Structure
+Quick facts
 
-```text
-examples/demo/
-├── entry.py       # Entry point
-├── a.py           # Module A
-├── b.py           # Module B
-└── common.py      # Shared utilities
-```
+- Location: `examples/demo/`
+- Entry point: `entry.py`
+- Purpose: show module reloads, fine‑grained dependency tracking, and state preservation.
 
-## Running the Demo
+Run it
 
 ```sh
 cd examples/demo
@@ -20,26 +16,16 @@ pip install -e .
 hmr entry.py
 ```
 
-## What It Does
+What to watch for
 
-The demo demonstrates:
+- Edit `a.py` or `b.py` and save: HMR reruns the changed module and any dependents.
+- Long‑lived state (e.g. objects created in modules you don’t edit) is preserved when possible.
+- Only affected names are re-evaluated thanks to runtime dependency tracking.
 
-- **Module reloading**: Edit `a.py` or `b.py` and see changes reflected instantly
-- **State preservation**: Global state survives reloads
-- **Dependency tracking**: Only affected modules rerun
+Tips
 
-## Try It Out
+- Keep heavy initialization in modules you rarely edit, or behind a factory so it can be re-created explicitly.
+- Use small pure functions for logic that you expect to swap frequently.
+- If behavior looks inconsistent after a reload, check for global mutable state, double-registration, or ABI/protocol changes.
 
-Edit `a.py` or `b.py` while the demo is running. You'll see:
-
-```text
-Hot reload triggered for a.py
-Hot reload triggered for b.py (since it depends on a.py)
-Application continues running with new code
-```
-
-## Key Takeaway
-
-This demo shows that HMR works without special frameworks. It's built into the `hmr` CLI and applies to any Python code.
-
-Learn more: [CLI Reference](../getting-started/cli.md) | [Next: Flask Integration](./flask.md)
+See also: `docs/getting-started/quick-start.md` and `docs/reactive/advanced.md`.

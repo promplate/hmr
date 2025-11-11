@@ -1,68 +1,32 @@
 # Installation
 
-Get `hmr` up and running in your project.
+Install the CLI and libraries you need.
 
-## Install
-
-Choose your preferred package manager:
-
-### pip
+- Install into an active virtual environment (recommended):
 
 ```sh
 pip install hmr
 ```
 
-### uv
+- Run without installing (via uv/pnpm/bun wrappers):
 
 ```sh
-uv pip install hmr
+uvx hmr path/to/entry.py
 ```
 
-### pipx
+Optional integrations:
 
-For global CLI access:
+- ASGI apps (drop-in uvicorn replacement): `pip install uvicorn-hmr`
+- MCP servers: `pip install mcp-hmr`
+- Browser auto-refresh for FastAPI: `pip install fastapi-reloader`
 
-```sh
-pipx install hmr
-```
-
-### uvx
-
-Run without installation:
-
-```sh
-uvx hmr <file.py>
-```
-
-## Virtual Environment
-
-If you're using a virtual environment, it's recommended to install `hmr` inside it rather than globally:
-
-```sh
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-pip install hmr
-```
-
-## Framework-Specific Installs
-
-### ASGI Applications
-
-For automatic browser refresh and ASGI support:
-
-```sh
-pip install uvicorn-hmr[all]
-```
-
-### Flask Applications
-
-```sh
-pip install fastapi-reloader
-```
-
-## Verify Installation
+Verify:
 
 ```sh
 hmr --help
 ```
 
-You should see the usage information. Now proceed to [Quick Start](./quick-start.md).
+Notes:
+
+- Prefer installing `hmr` inside the virtualenv used by your project to avoid cross-environment surprises.
+- Use the integration packages listed above when running frameworks (`uvicorn-hmr`, `mcp-hmr`, `fastapi-reloader`).

@@ -1,94 +1,50 @@
-# Flask
+# Flask — using HMR in development
 
-Use HMR with Flask applications for instant code reload without restarting.
+Use HMR to reload Python code in-place while developing Flask apps. HMR reruns changed modules and their dependents instead of restarting the whole process, which shortens the edit–test loop and preserves in-memory objects when possible.
 
-## Installation
+## Install
 
 ```sh
 pip install hmr
+# optional helpers
+pip install fastapi-reloader  # browser auto-refresh (if needed)
 ```
 
-For a full dev experience with browser auto-refresh:
-
-```sh
-pip install hmr fastapi-reloader
-```
-
-## Basic Usage
-
-Instead of `python app.py`, use:
+## Run
 
 ```sh
 hmr app.py
+# or, for a package entry
+hmr -m mypackage
 ```
 
-Flask's development server will automatically reload when you edit your code.
+## Important notes
 
-## With Development Mode
+- Disable Flask's builtin multiprocess reloader. Do not run both HMR and Flask's child-process reloader — run `hmr` directly.
+- HMR preserves state only when modules are not re-executed or when state is intentionally rebindable (factories, singletons you control).
+- Native extensions, C-level globals, or code that relies on process-level initialization may not be safe to hot-reload.
 
-Combine with Flask's debug mode:
+## Best practices
 
-```sh
-export FLASK_ENV=development
-export FLASK_DEBUG=1
-hmr app.py
-```
+- Move heavy initialization (DB pools, ML models) to a module you edit rarely or expose a factory to recreate them.
+- Make registration idempotent (avoid double-registering routes/hooks on reload).
+- Prefer small, pure route handlers and externalize mutable state to signals or controlled singletons.
+- Use pre_reload/post_reload hooks to clean up or re-register resources when necessary.
 
-Or in your code:
+## Example sketch
 
 ```python
-from flask import Flask
-
-app = Flask(__name__)
-
-@app.route('/')
-def hello():
-    return 'Hello, World!'
-
-if __name__ == '__main__':
-    app.run(debug=True)
-```
-
-Then run:
-
-```sh
-hmr app.py
-```
-
-## Reactive State
-
-You can also use reactive primitives in your Flask app:
-
-```python
+# app.py
 from flask import Flask, jsonify
-from reactivity import signal, derived
+from myapp.state import counter  # counter can be a reactivity State/signal
 
 app = Flask(__name__)
-counter = signal(0)
 
-@app.route('/count')
+@app.get("/count")
 def get_count():
     return jsonify({"count": counter.get()})
-
-@app.route('/increment')
-def increment():
-    counter.set(counter.get() + 1)
-    return jsonify({"count": counter.get()})
 ```
 
-State in signals will persist across reloads.
+If reloads behave oddly, reproduce in a minimal example and check for double registration, global mutable state, or ABI changes. For protocol or C-level breaks, prefer a full restart.
 
-## Key Differences from Flask Debug Mode
-
-| Feature             | Flask Debug | HMR              |
-| ------------------- | ----------- | ---------------- |
-| Reload on change    | ✓           | ✓                |
-| State preservation  | ✗           | ✓                |
-| Global scope rerun  | ✓           | ✗ (fine-grained) |
-| Reactive primitives | ✗           | ✓                |
-
-## Examples
-
-See `examples/flask/` for a complete Flask+HMR example.
-
-Learn more: [CLI Reference](../getting-started/cli.md) | [Reactive Primitives](../reactive/signals.md) | [ASGI Integration](./uvicorn.md)
+See `examples/flask/` for a concrete sample and `docs/reactive/advanced.md` for patterns that help HMR work well.
