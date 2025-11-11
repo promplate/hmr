@@ -61,6 +61,7 @@ features = [
     "navigation.tabs",
     "navigation.sections",
     "navigation.footer",
+    "toc.follow",
 ]
 
 [project.theme.icon]
