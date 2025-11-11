@@ -65,6 +65,7 @@ features = [
     "content.code.copy",
     "content.tooltips",
 ]
+favicon = "https://promplate.dev/favicon.png"
 
 [project.theme.icon]
 logo = "simple/pypi"
