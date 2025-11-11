@@ -62,6 +62,8 @@ features = [
     "navigation.sections",
     "navigation.footer",
     "toc.follow",
+    "content.code.copy",
+    "content.tooltips",
 ]
 
 [project.theme.icon]
