@@ -1,0 +1,88 @@
+[project]
+site_name = "HMR for Python"
+site_description = "Hot Module Reload (HMR) ecosystem for Python - docs and examples."
+site_url = "https://hmr.promplate.dev/"
+repo_url = "https://github.com/promplate/hmr"
+repo_name = "promplate/hmr"
+extra_css = ["stylesheets/extra.css"]
+site_author = "Muspi Merol"
+copyright = """
+<span style="opacity: 0.7"> &copy; 2025 </span>
+<a href="https://github.com/CNSeniorious000"> Muspi Merol </a>
+"""
+nav = [
+    { "Getting Started" = [
+        { "Introduction" = "index.md" },
+        { "What is HMR?" = "getting-started/intro.md" },
+        { "Installation" = "getting-started/installation.md" },
+        { "Quick Start" = "getting-started/quick-start.md" },
+        { "Contributing" = "contributing.md" },
+    ] },
+    { "HMR Integrations" = [
+        { "Demo Project" = "integrations/demo.md" },
+        { "Flask" = "integrations/flask.md" },
+        { "ASGI (Uvicorn)" = "integrations/uvicorn.md" },
+        { "MCP Server" = "integrations/mcp.md" },
+    ] },
+    { "Reactive Programming" = [
+        { "Signals" = "reactive/signals.md" },
+        { "Effects" = "reactive/effects.md" },
+        { "Derived Values" = "reactive/derived.md" },
+        { "Advanced Patterns" = "reactive/advanced.md" },
+    ] },
+    { "References" = [
+        { "API Reference" = "references/api.md" },
+        { "Index" = "references/index.md" },
+    ] },
+]
+
+[[project.extra.social]]
+icon = "material/github"
+link = "https://github.com/promplate/hmr"
+name = "GitHub Repository"
+
+[[project.extra.social]]
+icon = "material/language-python"
+link = "https://pypi.org/project/hmr/"
+name = "HMR on PyPI"
+
+[[project.extra.social]]
+icon = "material/web"
+link = "https://pyth-on-line.promplate.dev/hmr"
+name = "Official Website"
+
+[project.theme]
+variant = "modern"
+features = [
+    "search.highlight",
+    "navigation.instant",
+    "navigation.instant.progress",
+    "navigation.instant.prefetch",
+    "navigation.tabs",
+    "navigation.sections",
+]
+
+[project.theme.icon]
+logo = "simple/pypi"
+repo = "material/github"
+
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "material/lightbulb-variant-outline"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "material/lightbulb-variant"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "material/lightbulb-outline"
+toggle.name = "Switch to system preference"

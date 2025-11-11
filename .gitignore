@@ -10,6 +10,9 @@ wheels/
 .venv
 /*lock*
 
+# Build output
+site/
+
 # IDE config files
 .vscode
 .fleet
