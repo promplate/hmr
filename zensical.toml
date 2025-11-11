@@ -60,6 +60,7 @@ features = [
     "navigation.instant.prefetch",
     "navigation.tabs",
     "navigation.sections",
+    "navigation.footer",
 ]
 
 [project.theme.icon]
