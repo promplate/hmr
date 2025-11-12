@@ -51,3 +51,4 @@ extend-select = [
 
 [tool.m.aliases]
 s = "uv sync --all-packages"
+z = "zensical serve"
