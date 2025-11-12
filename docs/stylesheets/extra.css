@@ -20,3 +20,30 @@ article.md-typeset {
 a.headerlink {
   user-select: none;
 }
+
+.md-footer__direction {
+  opacity: 0.4;
+}
+
+.md-source__fact.md-source__fact--version {
+  display: none;
+}
+
+.md-source__repository.md-source__repository--active {
+  font-family: var(--md-code-font-family);
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.md-source__repository.md-source__repository--active li.md-source__fact::before {
+  width: 0.5rem;
+  transform: translateY(0.08rem);
+}
+
+a.md-source {
+  width: fit-content;
+}
+
+header.md-header {
+  background: linear-gradient(to bottom, var(--md-default-bg-color), var(--md-default-bg-color--light));
+}
