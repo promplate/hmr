@@ -2,8 +2,8 @@
 
 [HMR](https://pypi.org/project/hmr/) provides a pythonic, flexible, progressive-yet-intuitive reactive programming **engine**/**framework**, and on top of that, a fine-grained, on-demand hot-reload **tool**.
 
-- This reactive engine implements high-performance **push-pull reactivity**, letting you elegantly do reactive programming in Python _(read more about push-pull reactivity: [`1`](https://dev.to/dmnchzl/wtf-is-reactivity--4c1h) [`2`](https://en.wikipedia.org/wiki/Reactive_programming#Change_propagation_algorithms))_
-- This hot-reload tool implements **drop-in replacements** for `python` CLI, `uvicorn`, and `mcp / fastmcp` integration, boosting your development with or without frameworks
+- [x] The reactive engine implements high-performance **push-pull reactivity**, letting you elegantly do reactive programming in Python _(read more about push-pull reactivity: [`1`](https://dev.to/dmnchzl/wtf-is-reactivity--4c1h) [`2`](https://en.wikipedia.org/wiki/Reactive_programming#Change_propagation_algorithms))_
+- [x] The hot-reloading tools are **drop-in replacements** for `python` CLI, `uvicorn`, and `mcp / fastmcp` integration, boosting your development with or without frameworks
 
 Most features are usable independently. **Any** user can use one or more of the features above to improve development efficiency _(not exaggerating, this library improved my debugging efficiency by 10x-100x)_
 
