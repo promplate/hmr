@@ -25,6 +25,10 @@ article.md-typeset {
     color: hsla(var(--md-hue), 0%, 100%, 1);
     font-weight: 500;
   }
+  .admonition:not(:has(.admonition-title)) {
+    background: none;
+    border: dashed 1pt var(--md-accent-fg-color--transparent);
+  }
 }
 
 .md-copyright a {
