@@ -6,7 +6,7 @@ Reactive programming is an evolution of the observer pattern.
 
 Traditional observer patterns require manually binding dependencies between subjects and observers. Reactive programming automates this dependency tracking.
 
-> The principle is simple: call stacks record dependencies between calls. If we consider A calling B as A depending on B, then the relative positions in the call stack reveal the dependency relationships.
+> The principle is simple: [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack) record dependencies between calls. If we consider A calling B as A depending on B, then the relative positions in the call stack reveal the dependency relationships.
 
 Once dependencies are tracked, "reactive" means automatic reactions to data changes. If A depends on B and C, then A reacts to B and C; B and C are A's dependencies. That's reactive programming in essence.
 
@@ -14,10 +14,10 @@ Once dependencies are tracked, "reactive" means automatic reactions to data chan
 
 ## Signals and Effects
 
-In HMR, there are two core primitives: Signal and Effect. A Signal acts as a data source:
+In HMR, there are two core primitives: [Signal](signals.md) and Effect. A Signal acts as a data source:
 
 ```python
-from reactivity import signal
+[from reactivity import signal](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)
 
 s = signal(0)  # initial value is 0
 
@@ -28,12 +28,12 @@ s.set(1)  # update its value to 1
 print(s.get())
 ```
 
-This prints 0 then 1. Signals are observable data containers.
+This prints 0 then 1. Signals are [observable data containers](https://en.wikipedia.org/wiki/Observable).
 
-Effects subscribe to data sources and rerun when they change:
+[Effects](effects.md) subscribe to data sources and rerun when they change:
 
 ```python
-from reactivity import signal, effect
+[from reactivity import signal, effect](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)
 
 s = signal(0)
 
@@ -58,10 +58,11 @@ def _():
 
 ## Caching Idempotent Computations
 
-HMR provides another primitive: Derived, representing optimized data pipelines. Values are cached if dependencies haven't changed. Computation is lazy (unlike Effects, which are uncached and shouldn't return values—Effects are about "what to do with data" while Derived is about "returning processed data").
+HMR provides another primitive: [Derived](derived.md), representing optimized data pipelines. Values are cached if dependencies haven't changed. Computation is lazy (unlike Effects, which are uncached and shouldn't return values—Effects are about "what to do with data" while Derived is about "returning processed
+data").
 
 ```python
-from reactivity import signal, derived
+[from reactivity import signal, derived](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)
 
 s = signal(0)
 
@@ -96,8 +97,8 @@ print(f())
 
 ## Dependency Graph
 
-Signals, Derived, and Effects form the complete reactive primitives. Imagine a graph (like neural network visualizations): leftmost nodes are pure data sources (inputs/files/time), depending on nothing. Rightmost are Effects, depending on nothing else. Middle nodes are intermediate computations, depending on left nodes
-and depended on by right nodes.
+Signals, Derived, and Effects form the complete [reactive primitives](advanced.md). Imagine a graph (like neural network visualizations): leftmost nodes are pure data sources (inputs/files/time), depending on nothing. Rightmost are Effects, depending on nothing else. Middle nodes are intermediate computations,
+depending on left nodes and depended on by right nodes.
 
 > Obviously, any script can be viewed this way. Local data analysis typically follows:
 
@@ -106,7 +107,7 @@ and depended on by right nodes.
 3. Present results in some form
 
 ```python
-from reactivity import signal, derived, effect
+[from reactivity import signal, derived, effect](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)
 
 s = signal(0)
 
@@ -134,7 +135,7 @@ HMR's reactivity engine handles all this behind the scenes: ensuring idempotent 
 
 ## Hot Module Reload
 
-Even if the reactive paradigm doesn't appeal to you (I'd love to hear why in the repo discussions!), we offer a non-intrusive way to enhance development experience: the `hmr` CLI.
+Even if the reactive paradigm doesn't appeal to you (I'd love to hear why in the repo discussions!), we offer a non-intrusive way to enhance development experience: the [`hmr` CLI](https://github.com/promplate/pyth-on-line/tree/main/packages/hmr-daemon).
 
 > As mentioned, any script can be seen as a reactive graph (even without explicit usage). The HMR CLI embodies this philosophy. It provides a drop-in replacement for the Python CLI:
 
@@ -142,7 +143,7 @@ Even if the reactive paradigm doesn't appeal to you (I'd love to hear why in the
 2. Imported variables are derived values
 3. The entry file you run with `python foo.py` or `python -m foo.bar` is an Effect, since nothing depends on it
 
-When files change (code edits or data updates), directly affected Python code reruns (module-by-module). Updated variables trigger dependent modules to rerun, propagating upward until the entry (or stopping short, like not every butterfly wing flap causes a typhoon).
+When files change (code edits or data updates), directly affected Python code reruns ([module-by-module](https://docs.python.org/3/library/importlib.html)). Updated variables trigger dependent modules to rerun, propagating upward until the entry (or stopping short, like not every butterfly wing flap causes a typhoon).
 
 Simply use `hmr …` instead of `python …` to run your code, and see results update instantly when saving files—saving hundreds of times the development time! Compared to your changes, `python …` cold starts waste time on unchanged parts.
 
@@ -155,4 +156,4 @@ Thanks to meticulous engineering and perfectionism, HMR brings instant feedback 
 
 ## What's Next
 
-For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to other documentation pages.
+For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to [signals](signals.md), [derived](derived.md), [effects](effects.md), and [advanced](advanced.md) documentation pages.
