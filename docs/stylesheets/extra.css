@@ -33,6 +33,9 @@ article.md-typeset {
 
 a.headerlink {
   user-select: none;
+  h1:first-child > & {
+    display: none !important;
+  }
 }
 
 .md-footer__direction {
