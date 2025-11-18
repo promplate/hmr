@@ -27,6 +27,7 @@ A good way to understand a project is through comparisons with similar projects 
 
 - builds dependency graphs **at runtime**, thus supporting dependencies generated in various forms (e.g., `exec("import ...")`, `importlib.import_module(...)`), which cannot be statically analyzed and are widespread in the Python ecosystem
 - builds **variable-level** fine-grained dependency graphs, while tach only supports coarse-grained module-module dependencies. tach's coarse-grained dependency graphs often invalidate all nodes for any change
+- not only track Python modules but also track any [opened](https://docs.python.org/3/library/functions.html#open) files during runtime
 - has more Python ecosystem integration that works out-of-the-box, while tach only has a single [blog post](https://www.gauge.sh/blog/how-to-build-hot-module-replacement-in-python) example for implementing hot reloading.
 
 The other tools **do not track transitive dependencies** (they only reload directly modified code, which leaves dependent code out of sync), — maybe useful in tiny demos but fragile for real projects. Additionally, many of them rely on hacky monkey patching.
