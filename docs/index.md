@@ -9,7 +9,7 @@ title: Introduction
 
 [HMR](https://pypi.org/project/hmr/) provides a pythonic, flexible, progressive-yet-intuitive reactive programming **engine**/**framework**, and on top of that, a fine-grained, on-demand hot-reload **tool**.
 
-- [x] The reactive engine implements high-performance **push-pull reactivity**, letting you elegantly do reactive programming in Python _(read more about push-pull reactivity: [`1`](https://dev.to/dmnchzl/wtf-is-reactivity--4c1h) [`2`](https://en.wikipedia.org/wiki/Reactive_programming#Change_propagation_algorithms))_
+- [x] The reactive engine implements high-performance **push-pull reactivity**[^1][^2], letting you elegantly do reactive programming in Python
 - [x] The hot-reloading tools are **drop-in replacements** for `python` CLI, `uvicorn`, and `mcp / fastmcp` integration, boosting your development with or without frameworks
 
 !!! tip
@@ -63,7 +63,7 @@ Besides these two aspects, here are some individual comparisons:
 
 ### Reactive Programming Engines
 
-- TUI library [textual](https://github.com/textualize/textual/), Web app framework [py-shiny](https://github.com/posit-dev/py-shiny) both come with simple, framework-specific reactive systems [`1`](https://textual.textualize.io/guide/reactivity/) [`2`](https://shiny.posit.co/py/docs/reactive-patterns.html), but their reactions are all async. HMR natively supports **both sync and async reactivity**. It is **framework-agnostic** and can be easily integrated with different UI frameworks
+- TUI library [textual](https://github.com/textualize/textual/), Web app framework [py-shiny](https://github.com/posit-dev/py-shiny) both come with simple, framework-specific reactive systems[^3][^4], but their reactions are all async. HMR natively supports **both sync and async reactivity**. It is **framework-agnostic** and can be easily integrated with different UI frameworks
 - The interactive notebook [marimo](https://github.com/marimo-team/marimo) and the jupyter kernel [ipyflow](https://github.com/ipyflow/ipyflow) both use static analysis for reactivity, which has the same disadvantages mentioned above for `tach`
 - [RxPY](https://github.com/ReactiveX/RxPY) is closer to an opinionated event-driven framework rather than a fine-grained reactivity engine _(despite "reactive" being in its name)_
 
@@ -80,3 +80,11 @@ HMR also supports **isolated reactivity Contexts**, which enables separated reac
 Some of the wording here may sound exaggerated, but they are all facts. If you find exceptions, feel free to open an [Issue](https://github.com/promplate/hmr/issues)
 
 > This project also welcomes anyone to discuss future features!
+
+[^1]: There is an article about reactivity concepts _(in JavaScript)_ at [dev.to](https://dev.to/dmnchzl/wtf-is-reactivity--4c1h "Damien Chazoule: WTF Is Reactivity !?")
+
+[^2]: Another article: [Wikipedia](https://en.wikipedia.org/wiki/Reactive_programming#Change_propagation_algorithms "Reactive programming: Change propagation algorithms")
+
+[^3]: Textual Docs: [textual.textualize.io](https://textual.textualize.io/guide/reactivity/ "Textual: Reactivity")
+
+[^4]: Shiny for Python Docs: [shiny.posit.co](https://shiny.posit.co/py/docs/reactive-patterns.html "Shiny for Python: Reactive Patterns")

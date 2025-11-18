@@ -1,3 +1,9 @@
+@keyframes fadeOutline {
+  to {
+    outline-color: transparent;
+  }
+}
+
 article.md-typeset {
   h1 {
     opacity: 0.8;
@@ -28,6 +34,25 @@ article.md-typeset {
   .admonition:not(:has(.admonition-title)) {
     background: none;
     border: dashed 1pt var(--md-accent-fg-color--transparent);
+  }
+  .footnote-ref {
+    font-weight: 500;
+    &::before, &::after {
+      opacity: 0.5;
+      decoration: none;
+    }
+    &::before {
+      content: "[";
+      margin-right: 1pt;
+    }
+    &::after {
+      content: "]";
+      margin-left: 1pt;
+    }
+    [id^="fnref:"]:target > & {
+      outline: solid;
+      animation: fadeOutline 2s forwards;
+    }
   }
 }
 
