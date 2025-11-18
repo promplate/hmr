@@ -54,6 +54,13 @@ article.md-typeset {
       animation: fadeOutline 2s forwards;
     }
   }
+  /* lift the icons up a bit */
+  .admonition.tip .admonition-title::before {
+    transform: translateY(-2pt);
+  }
+  .admonition.success .admonition-title::before {
+    transform: translateY(-1pt);
+  }
 }
 
 .md-copyright a {

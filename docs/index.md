@@ -75,7 +75,9 @@ HMR also supports **isolated reactivity Contexts**, which enables separated reac
 - The reactivity models of [Svelte](https://svelte.dev/docs/svelte/what-are-runes), [SolidJS](https://docs.solidjs.com/concepts/intro-to-reactivity), [Vue](https://vuejs.org/guide/extras/reactivity-in-depth) gave this project inspiration and some reference
 - One of the initial objectives of this project is to create [Vite](https://vite.dev/) and [Vitest](https://vitest.dev/) in the Python ecosystem.
 
-> HMR has benefited greatly from the ideas and inspiration provided by these earlier projects.
+!!! tip "Thanks"
+
+    This project stands on the shoulders of earlier ones, inspired by their ideas and design choices.
 
 Some of the wording here may sound exaggerated, but they are all facts. If you find exceptions, feel free to open an [Issue](https://github.com/promplate/hmr/issues)
 
