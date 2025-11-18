@@ -1,6 +1,6 @@
 # Advanced Reactivity
 
-HMR uses **push-pull reactivity**: signals push notifications when updated, but derived values are lazy and only recompute when read (pulled) or when a hard puller (like an effect) forces evaluation.
+HMR uses **push-pull reactivity**: signals push notifications when updated, but derived values are lazy and only recompute when read (pulled) or when a hard puller (like an effect) forces evaluation. This creates a dependency graph where data flows from sources to consumers.
 
 ## Core primitives
 
@@ -81,3 +81,4 @@ def _():
 - Batch related updates
 - Use `new_context()` for isolated subsystems
 - Restart for C extensions or global state changes
+- Think of your code as a dependency graph: signals as sources, effects as consumers, derived as transformations

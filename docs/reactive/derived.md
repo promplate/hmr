@@ -1,6 +1,6 @@
 # Derived & Memoized
 
-Lazy computations with dependency tracking.
+Lazy computations with dependency tracking and caching. Derived represents optimized data pipelines where values are cached if dependencies remain unchanged—computation is lazy and idempotent.
 
 ```python
 from reactivity import signal, derived, memoized
@@ -26,3 +26,4 @@ def expensive():
 - `derived` for lazy values; `memoized` for cached computations
 - Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) and contexts
 - Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) for async computations
+- Unlike effects, derived values are about returning processed data, not performing side effects

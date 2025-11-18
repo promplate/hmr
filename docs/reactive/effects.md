@@ -1,6 +1,6 @@
 # Effects
 
-Side effects that auto-rerun when dependencies change. See [`effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) and [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py).
+Side effects that auto-rerun when dependencies change. Effects subscribe to data sources and automatically execute when signals they depend on update—unlike simple function calls, effects react to data changes.
 
 ```python
 from reactivity import effect
@@ -27,3 +27,4 @@ def logger():
 - Keep effects small and idempotent
 - Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) for async tasks
 - Dispose to avoid leaks
+- Effects are about "what to do with data" rather than returning processed values
