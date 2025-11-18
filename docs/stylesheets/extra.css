@@ -11,6 +11,20 @@ article.md-typeset {
   a {
     text-decoration: none;
   }
+  em {
+    color: var(--md-default-fg-color--light);
+  }
+  code {
+    font-feature-settings: "calt" !important;
+  }
+  blockquote {
+    border-color: var(--md-default-fg-color--lightest) !important;
+    border-width: 0.15rem !important;
+  }
+  [data-md-color-scheme="slate"] & strong {
+    color: hsla(var(--md-hue), 0%, 100%, 1);
+    font-weight: 500;
+  }
 }
 
 .md-copyright a {
