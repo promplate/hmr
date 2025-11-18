@@ -28,3 +28,9 @@ def logger():
 - Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) for async tasks
 - Dispose to avoid leaks
 - Effects are about "what to do with data" rather than returning processed values
+
+## See Also
+
+- [Signals](signals.md) for observable data sources
+- [Derived](derived.md) for cached computations
+- [Advanced Reactivity](advanced.md) for async effects and patterns

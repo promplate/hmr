@@ -1,6 +1,6 @@
 # Signals & State
 
-Observable values with automatic dependency tracking. Signals are the foundation of reactive programming, evolving from the observer pattern where data sources notify observers of changes.
+Observable values with automatic dependency tracking. Signals are the foundation of reactive programming, evolving from the [observer pattern](https://en.wikipedia.org/wiki/Observer_pattern) where data sources notify observers of changes.
 
 ```python
 from reactivity import signal, state
@@ -32,4 +32,10 @@ c.value = 1       # notifies effects reading Counter.value
 - `get(track=False)` reads without subscribing
 - [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) groups updates to reduce recomputations
 - Use `state` for instance attributes, `signal` for standalone values
-- Signals automatically track dependencies in call stacks, eliminating manual observer binding
+- Signals automatically track dependencies in [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack), eliminating manual observer binding
+
+## See Also
+
+- [Effects](effects.md) for side effects that react to signals
+- [Derived](derived.md) for computed values based on signals
+- [Advanced Reactivity](advanced.md) for patterns and best practices

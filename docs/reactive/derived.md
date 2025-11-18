@@ -27,3 +27,9 @@ def expensive():
 - Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) and contexts
 - Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) for async computations
 - Unlike effects, derived values are about returning processed data, not performing side effects
+
+## See Also
+
+- [Signals](signals.md) for the data sources derived depends on
+- [Effects](effects.md) for side effects that may trigger derived recomputation
+- [Advanced Reactivity](advanced.md) for async derived and patterns
