@@ -67,6 +67,7 @@ features = [
     "content.tooltips",
 ]
 favicon = "https://promplate.dev/favicon.png"
+custom_dir = "docs/overrides"
 
 [project.theme.icon]
 logo = "simple/pypi"
