@@ -14,7 +14,7 @@ title: Introduction
 
 !!! tip
 
-    Most features are usable independently. **Any** user can use one or more of the features above to improve development efficiency _(not exaggerating, this library improved my debugging efficiency by 10x-100x)
+    Most features are usable independently. **Any** user can use one or more of the features above to improve development efficiency _(not exaggerating, this library improved my debugging efficiency by 10x-100x)_
 
 This project supports Python 3.12+, and is compatible with alternative Python runtimes like [Pyodide](https://github.com/pyodide/pyodide "Pyodide — Python in the browser"), [GraalPy](https://github.com/oracle/graalpython "GraalPython — Python runtime on GraalVM"), and [RustPython](https://github.com/RustPython/RustPython "RustPython — Python interpreter in Rust"). It supports both asyncio and trio, and is well-tested in 3.12-3.14.
 
