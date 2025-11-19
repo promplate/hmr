@@ -5,7 +5,7 @@ hide:
 title: Introduction
 ---
 
-# What is HMR _- An Engine, a Tool, an Ecosystem._
+# Introducing HMR _- An Engine, a Tool, an Ecosystem._
 
 [HMR](https://pypi.org/project/hmr/ "this library") provides a pythonic, flexible, progressive-yet-intuitive reactive programming **engine**/**framework**, and on top of that, a fine-grained, on-demand hot-reload **tool**.
 
