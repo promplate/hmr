@@ -10,7 +10,7 @@ Observable values with automatic dependency tracking. Signals are the foundation
 from reactivity import signal, state
 ```
 
-[`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") is a descriptor for class attributes.
+[`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L10 "hmr reactivity: _curried.py — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L14 "hmr reactivity: _curried.py — GitHub") is a descriptor for class attributes.
 
 ## Usage
 
@@ -45,7 +45,7 @@ c.value = 1       # notifies effects reading Counter.value
 ## Tips
 
 - `get(track=False)` reads without subscribing to changes
-- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") groups updates to reduce recomputations
+- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") groups updates to reduce recomputations
 - Use `state` for instance attributes, `signal` for standalone values
 - Signals automatically track dependencies in [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack "inspect.stack — Python docs"), eliminating manual observer binding
 

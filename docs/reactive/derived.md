@@ -6,7 +6,7 @@ HMR also provides a primitive, Derived, which represents a data processing pipel
 from reactivity import signal, derived, memoized
 ```
 
-[`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") recomputes when read after invalidation. [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") caches results and acts as a hard puller.
+[`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L39 "hmr reactivity: _curried.py — GitHub") recomputes when read after invalidation. [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L75 "hmr reactivity: _curried.py — GitHub") caches results and acts as a hard puller.
 
 ## Example
 
@@ -47,8 +47,8 @@ print(f())
 ## Tips
 
 - `derived` for lazy values; `memoized` for cached computations
-- Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") and contexts
-- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") for async computations
+- Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") and contexts
+- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L123 "hmr reactivity: _curried.py — GitHub") for async computations
 - Unlike effects, derived values are about returning processed data, not performing side effects
 
 ## See Also

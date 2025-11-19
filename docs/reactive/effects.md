@@ -40,10 +40,10 @@ Runs immediately by default; set `call_immediately=False` to defer. Dispose with
 
 ## Tips
 
-- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") caches computations as dependencies; `effect` runs side effects
-- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") groups updates to run effects once
+- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L75 "hmr reactivity: _curried.py — GitHub") caches computations as dependencies; `effect` runs side effects
+- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") groups updates to run effects once
 - Keep effects small and idempotent
-- Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") for async tasks
+- Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L111 "hmr reactivity: _curried.py — GitHub") for async tasks
 - Dispose to avoid leaks
 - Effects are semantically closer to "what to do with the data source" rather than "return processed data"
 
