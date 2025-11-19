@@ -4,7 +4,7 @@
   }
 }
 
-article.md-typeset {
+.md-typeset {
   h1 {
     opacity: 0.8;
   }
@@ -58,6 +58,7 @@ article.md-typeset {
   .admonition.tip .admonition-title::before {
     transform: translateY(-2pt);
   }
+  .admonition.info .admonition-title::before,
   .admonition.success .admonition-title::before {
     transform: translateY(-1pt);
   }
