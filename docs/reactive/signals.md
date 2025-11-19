@@ -61,6 +61,6 @@ c.value = 1       # notifies effects reading Counter.value
 
 ## See Also
 
-- [Effects](effects.md "Effects") for side effects that react to signals
-- [Derived](derived.md "Derived") for computed values based on signals
-- [Advanced Reactivity](advanced.md "Advanced Reactivity") for patterns and best practices
+- [Effects](effects.md){ data-preview } for side effects that react to signals
+- [Derived](derived.md){ data-preview } for computed values based on signals
+- [Advanced Reactivity](advanced.md){ data-preview } for patterns and best practices

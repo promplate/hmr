@@ -59,6 +59,6 @@ Runs immediately by default; set `call_immediately=False` to defer. Dispose with
 
 ## See Also
 
-- [Signals](signals.md "Signals") for observable data sources
-- [Derived](derived.md "Derived") for cached computations
-- [Advanced Reactivity](advanced.md "Advanced Reactivity") for async effects and patterns
+- [Signals](signals.md){ data-preview } for observable data sources
+- [Derived](derived.md){ data-preview } for cached computations
+- [Advanced Reactivity](advanced.md){ data-preview } for async effects and patterns

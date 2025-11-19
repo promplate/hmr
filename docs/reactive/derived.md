@@ -63,6 +63,6 @@ print(f())
 
 ## See Also
 
-- [Signals](signals.md "Signals") for the data sources derived depends on
-- [Effects](effects.md "Effects") for side effects that may trigger derived recomputation
-- [Advanced Reactivity](advanced.md "Advanced Reactivity") for async derived and patterns
+- [Signals](signals.md){ data-preview } for the data sources derived depends on
+- [Effects](effects.md){ data-preview } for side effects that may trigger derived recomputation
+- [Advanced Reactivity](advanced.md){ data-preview } for async derived and patterns
