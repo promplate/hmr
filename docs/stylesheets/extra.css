@@ -35,6 +35,10 @@
     background: none;
     border: dashed 1pt var(--md-accent-fg-color--transparent);
   }
+  .admonition:first-child {
+    margin-top: 0;
+    margin-bottom: 2rem;
+  }
   .footnote-ref {
     font-weight: 500;
     &::before, &::after {
@@ -55,7 +59,8 @@
     }
   }
   /* lift the icons up a bit */
-  .admonition.tip .admonition-title::before {
+  .admonition.tip .admonition-title::before,
+  .admonition.danger .admonition-title::before {
     transform: translateY(-2pt);
   }
   .admonition.info .admonition-title::before,
