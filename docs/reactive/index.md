@@ -1,3 +1,7 @@
+---
+icon: lucide/power
+---
+
 # Reactive Programming Basics
 
 Reactive programming is an evolution of the observer pattern.

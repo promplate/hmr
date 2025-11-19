@@ -25,6 +25,7 @@ nav = [
         { "MCP Server" = "integrations/mcp.md" },
     ] },
     { "Reactive Programming" = [
+        { "Overview" = "reactive/index.md" },
         { "Signals" = "reactive/signals.md" },
         { "Effects" = "reactive/effects.md" },
         { "Derived Values" = "reactive/derived.md" },
