@@ -1,12 +1,14 @@
 # Effects
 
-Side effects that auto-rerun when dependencies change. Effects subscribe to data sources and automatically execute when signals they depend on update—unlike simple function calls, effects react to data changes.
+Side effects that auto-rerun when dependencies change. Effect can be understood as a script that subscribes to the data source.
 
 ```python
 from reactivity import effect
 ```
 
-Runs immediately by default; set `call_immediately=False` to defer. Dispose with `.dispose()` or context manager.
+Unlike a simple `print(s.get())`, when the value of `s` changes, related Effects will rerun.
+
+> In the example above, we use a lambda as the handler. But you can actually pass any callable function that can be called without arguments! I personally like to use effect as a decorator, like this:
 
 ## Example
 
@@ -15,22 +17,38 @@ from reactivity import signal, effect
 
 s = signal(0)
 
+effect(lambda: print(s.get()))  # like above, this would print 0
+```
+
+Now, when the value of `s` changes, the related effects will rerun. For example:
+
+```python
+s.set(1)
+```
+
+This will print out 1, even though you didn't explicitly call `print(s.get())` again.
+
+## Decorator usage
+
+```python
 @effect
-def logger():
+def _():
     print(s.get())
 ```
 
+Runs immediately by default; set `call_immediately=False` to defer. Dispose with `.dispose()` or context manager.
+
 ## Tips
 
-- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) caches computations as dependencies; `effect` runs side effects
-- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) groups updates to run effects once
+- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") caches computations as dependencies; `effect` runs side effects
+- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") groups updates to run effects once
 - Keep effects small and idempotent
-- Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) for async tasks
+- Use [`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py "hmr reactivity: _curried.py — GitHub") for async tasks
 - Dispose to avoid leaks
-- Effects are about "what to do with data" rather than returning processed values
+- Effects are semantically closer to "what to do with the data source" rather than "return processed data"
 
 ## See Also
 
-- [Signals](signals.md) for observable data sources
-- [Derived](derived.md) for cached computations
-- [Advanced Reactivity](advanced.md) for async effects and patterns
+- [Signals](signals.md "Signals") for observable data sources
+- [Derived](derived.md "Derived") for cached computations
+- [Advanced Reactivity](advanced.md "Advanced Reactivity") for async effects and patterns

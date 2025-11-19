@@ -8,13 +8,13 @@ HMR uses **push-pull reactivity**: signals push notifications when updated, but 
 from reactivity import signal, state, effect, derived, memoized, batch, new_context, reactive
 ```
 
-- [`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) / [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): observables
-- [`effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): side effects
-- [`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): lazy computed
-- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): cached with hard pull
-- [`batch`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py): group updates
-- [`new_context`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/context.py): isolated environment
-- [`reactive`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py): reactive containers
+- [`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L10 "hmr reactivity: _curried.py — GitHub") / [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L14 "hmr reactivity: _curried.py — GitHub"): observables
+- [`effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L27 "hmr reactivity: _curried.py — GitHub"): side effects
+- [`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L39 "hmr reactivity: _curried.py — GitHub"): lazy computed
+- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L75 "hmr reactivity: _curried.py — GitHub"): cached with hard pull
+- [`batch`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub"): group updates
+- [`new_context`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/context.py#L94 "hmr reactivity: context.py — GitHub"): isolated environment
+- [`reactive`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: collections.py — GitHub"): reactive containers
 
 ## Patterns
 
@@ -68,11 +68,11 @@ def _():
 
 ### 7. Reactive containers
 
-[`reactive()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py) creates reactive dicts, sets, lists, or object proxies with per-key/index tracking.
+[`reactive()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: collections.py — GitHub") creates reactive dicts, sets, lists, or object proxies with per-key/index tracking.
 
 ## Async
 
-[`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py) support asyncio/trio via pluggable task factories.
+[`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L111 "hmr reactivity: _curried.py — GitHub") and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L123 "hmr reactivity: _curried.py — GitHub") support asyncio/trio via pluggable task factories.
 
 ## Best practices
 

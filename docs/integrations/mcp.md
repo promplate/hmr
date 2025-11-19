@@ -2,23 +2,24 @@
 
 This page explains how to run Model Context Protocol (MCP) servers with hot reload and what to expect.
 
-Quick summary
+## Quick summary
 
-- Use mcp-hmr to run MCP servers without reconnecting clients on most code edits.
-- The reactivity layer reloads changed modules and notifies dependent code; long-lived connections and resources are preserved when possible.
-- For complex protocol/state changes or C-level state, prefer a full restart.
+- Use mcp-hmr to run MCP servers without reconnecting clients on most code edits
+- The reactivity layer reloads changed modules and notifies dependent code; long-lived connections and resources are preserved when possible
+- For complex protocol/state changes or C-level state, prefer a full restart
 
-Install
+## Install
 
 ```sh
 pip install mcp-hmr
 ```
 
-Run a server
+## Run a server
 
 ```sh
+# Run as a module or module:attr entry (like `python -m`):
 python -m mcp_hmr main:app
-# or if the package exposes a CLI entry:
+# or if the package exposes a CLI entry (recommended):
 mcp-hmr main:app
 ```
 
@@ -34,7 +35,7 @@ Recommended patterns
 - Use small, pure functions for tools/resources whenever possible; swapping pure functions is safer at runtime.
 - Add idempotent registration for tools/resources so reloads do not double-register them.
 
-Example: simple server structure
+Example: simple server structure (see [examples/mcp/](../../examples/mcp/ "MCP examples — examples/mcp/"))
 
 ```python
 # main.py
@@ -61,5 +62,5 @@ Debugging and caveats
 
 See also
 
-- `docs/getting-started/quick-start.md`
-- `docs/reactive/advanced.md` for recommended reactive patterns
+- [Quick Start](../getting-started/quick-start.md "Quick Start")
+- [Advanced Reactivity](../reactive/advanced.md "Advanced Reactivity") for recommended reactive patterns

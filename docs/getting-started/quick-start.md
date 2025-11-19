@@ -83,6 +83,6 @@ mcp-hmr server:app
 
 ## Next Steps
 
-- Explore [reactive primitives](../reactive/signals.md) for building reactive applications
-- Read [integration guides](../integrations/uvicorn.md) for framework-specific patterns
-- Check [advanced patterns](../reactive/advanced.md) for best practices
+- Explore [reactive primitives](../reactive/signals.md "Signals") for building reactive applications
+- Read [integration guides](../integrations/uvicorn.md "ASGI — uvicorn-hmr") for framework-specific patterns
+- Check [advanced patterns](../reactive/advanced.md "Advanced Reactivity") for best practices

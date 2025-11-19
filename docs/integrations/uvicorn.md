@@ -14,7 +14,7 @@ pip install uvicorn-hmr[all]
 
 ```sh
 uvicorn-hmr main:app
-# supports common uvicorn options; see uvicorn-hmr --help
+# supports common uvicorn options; see `uvicorn-hmr --help`
 ```
 
 ## CLI Options
@@ -23,7 +23,7 @@ uvicorn-hmr main:app
 
 **HMR-specific options:**
 
-- `--refresh`: Auto-refresh HTML pages in the browser when the server reloads (requires `fastapi-reloader`)
+- `--refresh`: Auto-refresh HTML pages in the browser when the server reloads (requires `fastapi-reloader` and/or `uvicorn-hmr[all]`)
 - `--clear`: Clear the terminal before each reload (like Vite's default behavior)
 - `--reload-include`: Paths to watch (defaults to current directory)
 - `--reload-exclude`: Paths to ignore
@@ -79,8 +79,8 @@ def read_root():
 
 ```sh
 uvicorn-hmr main:app
-# with browser auto-refresh:
+# with browser auto-refresh (requires `fastapi-reloader`):
 uvicorn-hmr main:app --refresh
 ```
 
-See `examples/fastapi/` for a concrete sample and `docs/reactive/` for reactive primitives that integrate with HMR.
+See [examples/fastapi/](../../examples/fastapi/ "FastAPI example — examples/fastapi/") for a concrete example (how to run and what to observe) and [docs/reactive/](../reactive/index.md "Reactive Programming Basics") for reactive primitives that integrate with HMR.

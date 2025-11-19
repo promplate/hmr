@@ -1,6 +1,6 @@
 # Flask — using HMR in development
 
-Use HMR to reload Python code in-place while developing Flask apps. HMR reruns changed modules and their dependents instead of restarting the whole process, which shortens the edit–test loop and preserves in-memory objects when possible.
+Use HMR to reload Python code in-place while developing Flask apps. HMR reruns changed modules and their dependents instead of restarting the whole process, shortening the edit-test loop and preserving in-memory objects when possible.
 
 ## Install
 
@@ -14,7 +14,7 @@ pip install fastapi-reloader  # browser auto-refresh (if needed)
 
 ```sh
 hmr app.py
-# or, for a package entry
+# or for package entry
 hmr -m mypackage
 ```
 
@@ -47,4 +47,4 @@ def get_count():
 
 If reloads behave oddly, reproduce in a minimal example and check for double registration, global mutable state, or ABI changes. For protocol or C-level breaks, prefer a full restart.
 
-See `examples/flask/` for a concrete sample and `docs/reactive/advanced.md` for patterns that help HMR work well.
+See [examples/flask/](../../examples/flask/ "Flask example — examples/flask/") for a concrete example and [Advanced Reactivity](../reactive/advanced.md "Advanced Reactivity") for patterns that help HMR work well.

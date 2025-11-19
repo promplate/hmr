@@ -1,6 +1,6 @@
 # Introduction
 
-HMR (Hot Module Reload / Hot Module Replacement) updates running Python code when source files change, without restarting the whole process. Only the changed module and the code that depends on it are re-executed, preserving in-memory state and speeding up the edit–test loop.
+HMR (Hot Module Reload / Hot Module Replacement) updates running Python code when source files change, without restarting the whole process. Only the changed module and the code that depends on it are re-executed, preserving in-memory state and speeding up your edit-test loop.
 
 ## Why HMR?
 
@@ -89,5 +89,5 @@ def logger():
 
 ## Next Steps
 
-- [Installation](./installation.md): Install HMR
-- [Quick Start](./quick-start.md): Try a simple example
+- [Installation](./installation.md "Installation"): Install HMR
+- [Quick Start](./quick-start.md "Quick Start"): Try a simple example
