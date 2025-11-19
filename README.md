@@ -45,7 +45,7 @@ HMR provides a rich ecosystem of tools for different Python development scenario
 | [`hmr`][repo]                                      | Reactive programming lib and HMR core implementation         |
 | [`uvicorn-hmr`](./packages/uvicorn-hmr/)           | HMR-enabled Uvicorn server for ASGI apps                     |
 | [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                            |
-| [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes modules on changes          |
+| [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes module variables on changes |
 | [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading |
 
 > [!TIP]

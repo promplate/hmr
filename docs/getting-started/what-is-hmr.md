@@ -79,13 +79,13 @@ def logger():
 
 ## Ecosystem
 
-| Package            | Purpose                          |
-| ------------------ | -------------------------------- |
-| `hmr`              | Core library + CLI               |
-| `uvicorn-hmr`      | ASGI integration (FastAPI, etc.) |
-| `mcp-hmr`          | MCP server integration           |
-| `fastapi-reloader` | Browser auto-refresh for FastAPI |
-| `hmr-daemon`       | Background module refresh daemon |
+| Package                                                                                                      | Use Case                                               |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| [`hmr`](https://pypi.org/project/hmr/ "hmr core package")                                                    | Reactive programming lib and hot reloading             |
+| [`uvicorn-hmr`](https://pypi.org/project/uvicorn-hmr/ "HMR-enabled Uvicorn server for ASGI apps")            | ASGI integration (FastAPI, etc.)                       |
+| [`mcp-hmr`](https://pypi.org/project/mcp-hmr/ "HMR-enabled MCP/FastMCP server")                              | MCP server integration                                 |
+| [`fastapi-reloader`](https://pypi.org/project/fastapi-reloader/ "An ASGI middleware for browser refreshing") | A plugin for `uvicorn-hmr` to auto-refresh the browser |
+| [`hmr-daemon`](https://pypi.org/project/hmr-daemon/ "Background daemon that refreshes modules on changes")   | Keep variables up-to-date in a daemon thread           |
 
 ## Next Steps
 
