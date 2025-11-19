@@ -1,0 +1,61 @@
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slideIn1x {
+  from {
+    transform: translateY(0.1rem);
+  }
+}
+
+@keyframes slideIn2x {
+  from {
+    transform: translateY(0.2rem);
+  }
+}
+
+@keyframes slideIn3x {
+  from {
+    transform: translateY(0.25rem);
+  }
+}
+
+article.md-typeset {
+  > :not(.admonition:first-child):nth-child(1) {
+    animation: fadeIn 0.1s ease-out backwards;
+  }
+  > :not(.admonition:first-child):nth-child(2) {
+    animation: fadeIn 0.15s ease-out backwards, slideIn1x 0.5s ease-out backwards;
+    animation-delay: 0.01s;
+  }
+  > :not(.admonition:first-child):nth-child(3) {
+    animation: fadeIn 0.2s ease-out backwards, slideIn1x 0.6s ease-out backwards;
+    animation-delay: 0.03s;
+  }
+  > :not(.admonition:first-child):nth-child(4) {
+    animation: fadeIn 0.25s ease-out backwards, slideIn2x 0.7s ease-out backwards;
+    animation-delay: 0.06s;
+  }
+  > :not(.admonition:first-child):nth-child(5) {
+    animation: fadeIn 0.3s ease-out backwards, slideIn2x 0.8s ease-out backwards;
+    animation-delay: 0.10s;
+  }
+  > :not(.admonition:first-child):nth-child(6) {
+    animation: fadeIn 0.35s ease-out backwards, slideIn2x 0.9s ease-out backwards;
+    animation-delay: 0.16s;
+  }
+  > :not(.admonition:first-child):nth-child(7) {
+    animation: fadeIn 0.45s ease-out backwards, slideIn3x 1s ease-out backwards;
+    animation-delay: 0.23s;
+  }
+  > :not(.admonition:first-child):nth-child(8) {
+    animation: fadeIn 0.5s ease-out backwards, slideIn3x 1s ease-out backwards;
+    animation-delay: 0.31s;
+  }
+  > :not(.admonition:first-child):nth-child(n+9) {
+    animation: fadeIn 1s ease-out backwards, slideIn3x 1s ease-out backwards;
+    animation-delay: 0.40s;
+  }
+}
