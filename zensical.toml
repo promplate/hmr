@@ -20,9 +20,9 @@ nav = [
     ] },
     { "HMR Integrations" = [
         { "Demo Project" = "integrations/demo.md" },
-        { "Flask" = "integrations/flask.md" },
-        { "ASGI (Uvicorn)" = "integrations/uvicorn.md" },
         { "MCP Server" = "integrations/mcp.md" },
+        { "ASGI (Uvicorn)" = "integrations/uvicorn.md" },
+        { "Flask" = "integrations/flask.md" },
     ] },
     { "Reactive Programming" = [
         { "Overview" = "reactive/index.md" },
