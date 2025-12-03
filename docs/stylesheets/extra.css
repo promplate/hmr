@@ -7,6 +7,20 @@
 .md-typeset {
   h1 {
     opacity: 0.8;
+    &:has(code) {
+      opacity: 1;
+      code {
+        font-size: 0.7em;
+        background: none;
+        padding: 0;
+        .kn, .o {
+          color: var(--md-default-fg-color--lighter);
+          @media (max-width: 60em) {
+            display: none;
+          }
+        }
+      }
+    }
   }
   h1, h2, h3 {
     font-weight: 300;
@@ -20,7 +34,7 @@
   em {
     color: var(--md-default-fg-color--light);
   }
-  code {
+  code, .doc {
     font-feature-settings: "calt" !important;
   }
   blockquote {

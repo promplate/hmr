@@ -32,8 +32,20 @@ nav = [
         { "Advanced Patterns" = "reactive/advanced.md" },
     ] },
     { "References" = [
-        { "API Reference" = "references/api.md" },
-        { "Index" = "references/index.md" },
+        { "HMR Core" = [
+            { "<code>.</code>" = "references/reactivity/index.md" },
+            { "<code>.primitives</code>" = "references/reactivity/primitives.md" },
+            { "<code>.async_primitives</code>" = "references/reactivity/async_primitives.md" },
+            { "<code>.context</code>" = "references/reactivity/context.md" },
+            { "<code>.helpers</code>" = "references/reactivity/helpers.md" },
+            { "<code>.collections</code>" = "references/reactivity/collections.md" },
+            { "<code>.hmr</code>" = "references/hmr/index.md" },
+            { "<code>.hmr.run</code>" = "references/hmr/run.md" },
+            { "<code>.hmr.core</code>" = "references/hmr/core.md" },
+            { "<code>.hmr.api</code>" = "references/hmr/api.md" },
+            { "<code>.hmr.hooks</code>" = "references/hmr/hooks.md" },
+            { "<code>.hmr.exec_hack</code>" = "references/hmr/exec_hack.md" },
+        ] },
     ] },
 ]
 
@@ -93,3 +105,18 @@ media = "(prefers-color-scheme: dark)"
 scheme = "slate"
 toggle.icon = "material/lightbulb-outline"
 toggle.name = "Switch to system preference"
+
+[project.plugins.mkdocstrings.handlers.python.options]
+members_order = "source"
+docstring_style = "numpy"
+show_if_no_docstring = true
+modernize_annotations = true
+show_symbol_type_heading = true
+heading_level = 3
+overloads_only = true
+show_signature_annotations = true
+show_signature_type_parameters = true
+separate_signature = true
+filters = [".*"]
+show_root_toc_entry = false
+show_symbol_type_toc = true
