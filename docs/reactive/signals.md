@@ -20,7 +20,7 @@ Observable values with automatic dependency tracking. Signals are the foundation
 from reactivity import signal, state
 ```
 
-[`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L10 "hmr reactivity: _curried.py — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L14 "hmr reactivity: _curried.py — GitHub") is a descriptor for class attributes.
+[`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is a descriptor for class attributes.
 
 ## Usage
 
@@ -36,6 +36,8 @@ print(s.get())  # use .get() to get the value of a signal
 s.set(1)  # set its value to 1
 
 print(s.get())
+
+s.update(lambda x: x + 1)  # update using a function
 ```
 
 This will print out 0 and then 1. As you can see, Signal is just a data source that tracks changes.
@@ -55,7 +57,8 @@ c.value = 1       # notifies effects reading Counter.value
 ## Tips
 
 - `get(track=False)` reads without subscribing to changes
-- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") groups updates to reduce recomputations
+- `update(updater)` modifies the signal using a function
+- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") groups updates to reduce recomputations
 - Use `state` for instance attributes, `signal` for standalone values
 - Signals automatically track dependencies in [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack "inspect.stack — Python docs"), eliminating manual observer binding
 

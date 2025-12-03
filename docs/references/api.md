@@ -22,14 +22,16 @@ from reactivity import (
 )
 ```
 
-- `signal(initial, check_equality=True, context=None)` - Standalone observable. Methods: get(), set(), update().
-- `state(initial, check_equality=True, context=None)` - Descriptor for class attributes.
-- `effect(fn, call_immediately=True, context=None)` - Side effects that auto-rerun on dependency changes.
-- `derived(fn, check_equality=True, context=None)` - Lazy computed value.
-- `memoized(fn, context=None)` - Cached computation with dependency tracking.
-- `batch(func=None, context=None)` - Group updates; effects run once after.
-- `reactive(value, check_equality=True, context=None)` - Reactive containers with per-key tracking.
-- `new_context()` - Isolated reactive environment.
+- `signal(initial, check_equality=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Standalone observable. Methods: get(), set(), update().
+- `state(initial, check_equality=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Descriptor for class attributes.
+- `effect(fn, call_immediately=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Side effects that auto-rerun on dependency changes.
+- `async_effect(fn, call_immediately=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/async_primitives.py)) - Asynchronous side effects that auto-rerun on dependency changes.
+- `derived(fn, check_equality=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Lazy computed value.
+- `async_derived(fn, check_equality=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/async_primitives.py)) - Lazy computed value for asynchronous computations.
+- `memoized(fn, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Eager, cached computation.
+- `batch(func=None, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py)) - Group updates; effects run once after.
+- `reactive(value, check_equality=True, context=None)` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py)) - Reactive containers with per-key tracking.
+- `new_context()` ([source](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/context.py)) - Isolated reactive environment.
 
 Descriptor helpers: `memoized_property`, `derived_property` etc.
 

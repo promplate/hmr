@@ -33,12 +33,12 @@ uvicorn-hmr main:app
 
 **HMR-specific options:**
 
-- `--refresh`: Auto-refresh HTML pages in the browser when the server reloads (requires `fastapi-reloader` and/or `uvicorn-hmr[all]`)
-- `--clear`: Clear the terminal before each reload (like Vite's default behavior)
-- `--reload-include`: Paths to watch (defaults to current directory)
-- `--reload-exclude`: Paths to ignore
+- `--refresh`: Enables auto-refreshing of HTML pages in the browser whenever the server restarts. Useful for demo purposes and visual debugging. Requires `fastapi-reloader` to be installed (e.g., `pip install uvicorn-hmr[all]`).
+- `--clear`: Wipes the terminal before each reload (like Vite's default behavior).
+- `--reload-include`: Paths to watch (only file or directory paths allowed, not patterns; defaults to current directory if not specified).
+- `--reload-exclude`: Paths to ignore (only file or directory paths allowed, not patterns).
 
-**Note:** Unlike uvicorn, `reload-include` and `reload-exclude` accept paths only (not patterns). HMR automatically tracks file system access through reactive FS tracking.
+**Note:** Unlike uvicorn's `reload_include`/`reload_exclude` which support patterns and always include/exclude all Python files by default, uvicorn-hmr only watches the paths you specify and uses reactive file system tracking for automatic dependency detection.
 
 ## What to expect
 
@@ -48,13 +48,13 @@ uvicorn-hmr main:app
 
 ## Comparison with `uvicorn --reload`
 
-| Feature             | uvicorn --reload | uvicorn-hmr        |
-| ------------------- | ---------------- | ------------------ |
-| Reload on change    | ✓                | ✓                  |
-| Preserve some state | ✗                | ✓ (best effort)    |
-| Fine-grained reload | ✗                | ✓                  |
-| Reactive primitives | ✗                | ✓                  |
-| Browser refresh     | ✗                | ✓ (with --refresh) |
+| Feature             | uvicorn --reload | uvicorn-hmr                                 |
+| ------------------- | ---------------- | ------------------------------------------- |
+| Reload on change    | ✓                | ✓                                           |
+| Preserve some state | ✗                | ✓ (best effort)                             |
+| Fine-grained reload | ✗                | ✓                                           |
+| Reactive primitives | ✗                | ✓                                           |
+| Browser refresh     | ✗                | ✓ (via `fastapi-reloader` with `--refresh`) |
 
 ## Caveats
 
@@ -89,7 +89,7 @@ def read_root():
 
 ```sh
 uvicorn-hmr main:app
-# with browser auto-refresh (requires `fastapi-reloader`):
+# with browser auto-refresh (requires `fastapi-reloader` to be installed):
 uvicorn-hmr main:app --refresh
 ```
 

@@ -16,8 +16,6 @@ Use HMR to reload Python code in-place while developing Flask apps. HMR reruns c
 
 ```sh
 pip install hmr
-# optional helpers
-pip install fastapi-reloader  # browser auto-refresh (if needed)
 ```
 
 ## Run
@@ -28,25 +26,34 @@ hmr app.py
 hmr -m mypackage
 ```
 
+## What to Observe
+
+Once the server is running, you can access the application at `http://localhost:5000`.
+
+- Visit different endpoints and modify the response logic in your modules.
+- Try modifying route handlers and refresh the browser to see changes applied instantly.
+- Everything should work as expected, with a much smoother development experience than `flask run --reload`.
+
 ## Important notes
 
-- Disable Flask's builtin multiprocess reloader. Do not run both HMR and Flask's child-process reloader — run `hmr` directly.
-- HMR preserves state only when modules are not re-executed or when state is intentionally rebindable (factories, singletons you control).
+- Disable Flask's builtin debug mode reloader. Do not run both HMR and Flask's reloader — run `hmr` directly.
+- HMR preserves state only when modules are not re-executed. When a module is changed, it and its dependents are re-executed.
 - Native extensions, C-level globals, or code that relies on process-level initialization may not be safe to hot-reload.
 
 ## Best practices
 
-- Move heavy initialization (DB pools, ML models) to a module you edit rarely or expose a factory to recreate them.
-- Make registration idempotent (avoid double-registering routes/hooks on reload).
-- Prefer small, pure route handlers and externalize mutable state to signals or controlled singletons.
-- Use pre_reload/post_reload hooks to clean up or re-register resources when necessary.
+- Move heavy initialization (DB pools, ML models) to modules you edit rarely.
+- Make route registration idempotent to avoid double-registering on reload.
+- Prefer small, pure route handlers and minimize module-level state.
 
 ## Example sketch
 
 ```python
 # app.py
 from flask import Flask, jsonify
-from myapp.state import counter  # counter can be a reactivity State/signal
+from reactivity import signal
+
+counter = signal(0)  # counter can be a reactivity signal
 
 app = Flask(__name__)
 
@@ -55,6 +62,6 @@ def get_count():
     return jsonify({"count": counter.get()})
 ```
 
-If reloads behave oddly, reproduce in a minimal example and check for double registration, global mutable state, or ABI changes. For protocol or C-level breaks, prefer a full restart.
+If reloads behave oddly, reproduce in a minimal example and check for double registration or global mutable state. For protocol or C-level breaks, prefer a full restart.
 
-See [examples/flask/](../../examples/flask/ "Flask example — examples/flask/") for a concrete example and [Advanced Reactivity](../reactive/advanced.md "Advanced Reactivity") for patterns that help HMR work well.
+See [examples/flask/](../../examples/flask/ "Flask example — examples/flask/") for a concrete example.

@@ -10,13 +10,20 @@ icon: lucide/squircle-dashed
 
 # Derived
 
-HMR also provides a primitive, Derived, which represents a data processing pipeline. It is highly optimized—if the signals it depends on haven't changed after computation, its value will be cached. Its computation is lazy. (Relatively speaking, effect is not cached and it's not recommended to return values in effects, because Effect is semantically closer to "what to do with the data source" while Derived is "return processed data").
+A `derived` value is a calculation based on one or more signals. It's both **lazy** and **cached**.
+
+- **Lazy**: The calculation only runs when you ask for its value (i.e., when it's "pulled").
+- **Cached**: If its underlying signals haven't changed, the `derived` value won't re-run the calculation. It will return a cached result.
+
+When a signal dependency changes, the derived value is marked as "stale." The expensive calculation isn't performed immediately; it waits until the next time the value is requested. This is different from an `effect`, which runs immediately when its dependencies change, and is meant for side effects, not for returning values.
 
 ```python
-from reactivity import signal, derived, memoized
+from reactivity import signal, derived, memoized, effect
 ```
 
-[`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L39 "hmr reactivity: _curried.py — GitHub") recomputes when read after invalidation. [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L75 "hmr reactivity: _curried.py — GitHub") caches results and acts as a hard puller.
+[`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is for **lazy, pull-based** computations. It only re-calculates when its value is requested.
+
+[`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is for **eager, push-based** computations. It acts like an `effect` that re-calculates its value immediately whenever a dependency changes, and then caches the result. This is useful for expensive computations where you want the result to be ready _before_ it's requested.
 
 ## Example
 
@@ -56,7 +63,7 @@ print(f())
 
 ## Tips
 
-- `derived` for lazy values; `memoized` for cached computations
+- `derived` for lazy computed values; `memoized` for cached computations that track dependencies
 - Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") and contexts
 - Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L123 "hmr reactivity: _curried.py — GitHub") for async computations
 - Unlike effects, derived values are about returning processed data, not performing side effects
