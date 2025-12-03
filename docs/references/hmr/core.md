@@ -1,6 +1,6 @@
 ---
 icon: lucide/cone
-title: HMR Core
+title: Reactive Module Loading
 ---
 
 # `#!py from reactivity.hmr.core import *`

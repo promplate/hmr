@@ -1,6 +1,6 @@
 ---
 icon: lucide/cone
-title: HMR Run
+title: HMR CLI
 ---
 
 # `#!py from reactivity.hmr.run import *`

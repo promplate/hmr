@@ -1,6 +1,6 @@
 ---
 icon: lucide/cone
-title: HMR Exec Hack
+title: AST transform
 ---
 
 # `#!py from reactivity.hmr.exec_hack import *`

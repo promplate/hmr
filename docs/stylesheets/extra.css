@@ -78,6 +78,7 @@
     transform: translateY(-2pt);
   }
   .admonition.info .admonition-title::before,
+  .admonition.quote .admonition-title::before,
   .admonition.success .admonition-title::before {
     transform: translateY(-1pt);
   }
