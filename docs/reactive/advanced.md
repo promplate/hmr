@@ -18,13 +18,13 @@ HMR uses **push-pull reactivity**: signals push notifications when updated, but 
 from reactivity import signal, state, effect, derived, memoized, batch, new_context, reactive
 ```
 
-- [`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L10 "hmr reactivity: _curried.py — GitHub") / [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L14 "hmr reactivity: _curried.py — GitHub"): observables
-- [`effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L27 "hmr reactivity: _curried.py — GitHub"): side effects
-- [`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L39 "hmr reactivity: _curried.py — GitHub"): lazy computed
-- [`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L75 "hmr reactivity: _curried.py — GitHub"): cached with hard pull
-- [`batch`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub"): group updates
-- [`new_context`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/context.py#L94 "hmr reactivity: context.py — GitHub"): isolated environment
-- [`reactive`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: collections.py — GitHub"): reactive containers
+- [`signal`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L91 "hmr reactivity: Signal class — GitHub") / [`state`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L181 "hmr reactivity: State class — GitHub"): observables
+- [`effect`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L204 "hmr reactivity: Effect class — GitHub"): side effects
+- [`derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L262 "hmr reactivity: Derived class — GitHub"): lazy computed
+- [`memoized`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/helpers.py#L10 "hmr reactivity: Memoized class — GitHub"): cached with hard pull
+- [`batch`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L218 "hmr reactivity: Batch class — GitHub"): group updates
+- [`new_context`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/context.py#L94 "hmr reactivity: new_context function — GitHub"): isolated environment
+- [`reactive`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: reactive function — GitHub"): reactive containers
 
 ## Patterns
 
@@ -78,11 +78,11 @@ def _():
 
 ### 7. Reactive containers
 
-[`reactive()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: collections.py — GitHub") creates reactive dicts, sets, lists, or object proxies with per-key/index tracking.
+[`reactive()`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/collections.py#L430 "hmr reactivity: reactive function — GitHub") creates reactive dicts, sets, lists, or object proxies with per-key/index tracking.
 
 ## Async
 
-[`async_effect`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L111 "hmr reactivity: _curried.py — GitHub") and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L123 "hmr reactivity: _curried.py — GitHub") support asyncio/trio via pluggable task factories.
+[`async_effect`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L61 "hmr reactivity: AsyncEffect class — GitHub") and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") support asyncio/trio via pluggable task factories.
 
 ## Best practices
 

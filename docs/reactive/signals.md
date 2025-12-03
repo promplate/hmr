@@ -20,7 +20,7 @@ Observable values with automatic dependency tracking. Signals are the foundation
 from reactivity import signal, state
 ```
 
-[`signal`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is a descriptor for class attributes.
+[`signal`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L91 "hmr reactivity: Signal class — GitHub") creates standalone observables. [`state`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L181 "hmr reactivity: State class — GitHub") is a descriptor for class attributes.
 
 ## Usage
 
@@ -58,7 +58,7 @@ c.value = 1       # notifies effects reading Counter.value
 
 - `get(track=False)` reads without subscribing to changes
 - `update(updater)` modifies the signal using a function
-- [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") groups updates to reduce recomputations
+- [`batch()`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L218 "hmr reactivity: Batch class — GitHub") groups updates to reduce recomputations
 - Use `state` for instance attributes, `signal` for standalone values
 - Signals automatically track dependencies in [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack "inspect.stack — Python docs"), eliminating manual observer binding
 

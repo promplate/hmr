@@ -27,34 +27,43 @@ pip install mcp-hmr
 ## Run a server
 
 ```sh
-# Run as a module or module:attr entry (like `python -m`):
-python -m mcp_hmr main:app
-# or if the package exposes a CLI entry (recommended):
+mcp-hmr main.py:app
+```
+
+Or using module import format:
+
+```sh
 mcp-hmr main:app
 ```
 
 Notes on behavior
 
 - The running MCP server keeps existing connections. When a changed module updates tools/resources, the server replaces the implementation in-place and the next tool invocation uses the new code.
-- Keep explicit teardown/setup hooks for resources that must be reinitialized on reload. Use hmr hooks (pre_reload/post_reload) where provided by the HMR API to unregister or re-register resources.
 - Avoid mutating protocol wire formats at runtime; changes to RPC signatures or resource schemas may require coordinated client updates or a restart.
+- Now, whenever you save changes to your source code, the server will automatically reload without dropping the connection to the client.
 
 Recommended patterns
 
-- Put heavy, stateful initialization (database pools, ML models) into modules you rarely edit, or expose a factory so you can re-create on demand.
-- Use small, pure functions for tools/resources whenever possible; swapping pure functions is safer at runtime.
+- Put heavy, stateful initialization (database pools, ML models) into modules you rarely edit.
+- Use small, pure functions for tools/resources whenever possible.
 - Add idempotent registration for tools/resources so reloads do not double-register them.
+
+## What to Observe
+
+- Try changing the tool's return value or resource's content and save the file.
+- You will see the client output update to reflect your changes without restarting the connection.
+- This demonstrates how mcp-hmr enables seamless hot reloading for MCP servers, maintaining the connection between client and server while updating the code on-the-fly.
 
 Example: simple server structure (see [examples/mcp/](../../examples/mcp/ "MCP examples — examples/mcp/"))
 
 ```python
 # main.py
-from fastmcp import Server
-from my_app import tools  # keep tools small and pure
+from mcp.server.fastmcp import FastMCP
+from tools import echo  # keep tools small and pure
 
-server = Server()
-server.register_tool("echo", tools.echo)
-server.serve()
+server = FastMCP("My Server")
+server.add_tool(echo)
+server.run()
 ```
 
 On code change
@@ -74,3 +83,4 @@ See also
 
 - [Quick Start](../getting-started/quick-start.md "Quick Start")
 - [Advanced Reactivity](../reactive/advanced.md "Advanced Reactivity") for recommended reactive patterns
+- [MCP Example](../../examples/mcp/ "MCP example — examples/mcp/") for concrete usage examples with MCP Inspector and client demos

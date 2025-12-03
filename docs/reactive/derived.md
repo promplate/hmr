@@ -21,9 +21,9 @@ When a signal dependency changes, the derived value is marked as "stale." The ex
 from reactivity import signal, derived, memoized, effect
 ```
 
-[`derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is for **lazy, pull-based** computations. It only re-calculates when its value is requested.
+[`derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L262 "hmr reactivity: Derived class — GitHub") is for **lazy, pull-based** computations. It only re-calculates when its value is requested.
 
-[`memoized`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/primitives.py "hmr reactivity: primitives.py — GitHub") is for **eager, push-based** computations. It acts like an `effect` that re-calculates its value immediately whenever a dependency changes, and then caches the result. This is useful for expensive computations where you want the result to be ready _before_ it's requested.
+[`memoized`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/helpers.py#L10 "hmr reactivity: Memoized class — GitHub") is for **cached computations with dependency tracking**. It caches results and invalidates them when dependencies change, recomputing only when accessed.
 
 ## Example
 
@@ -64,8 +64,8 @@ print(f())
 ## Tips
 
 - `derived` for lazy computed values; `memoized` for cached computations that track dependencies
-- Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L135 "hmr reactivity: _curried.py — GitHub") and contexts
-- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/main/packages/hmr/reactivity/_curried.py#L123 "hmr reactivity: _curried.py — GitHub") for async computations
+- Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L218 "hmr reactivity: Batch class — GitHub") and contexts
+- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") for async computations
 - Unlike effects, derived values are about returning processed data, not performing side effects
 
 ## See Also
