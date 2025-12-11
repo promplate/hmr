@@ -22,7 +22,7 @@
   }
 }
 
-article.md-typeset {
+article.md-typeset:not(:has(.doc:first-child)) {
   > :not(.admonition:first-child):nth-child(1) {
     animation: fadeIn 0.1s ease-out backwards;
   }
