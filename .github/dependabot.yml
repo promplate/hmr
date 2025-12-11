@@ -18,7 +18,23 @@ updates:
     schedule:
       interval: daily
   - package-ecosystem: pip
+    directory: /examples/mcp
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
     directory: /packages/uvicorn-hmr
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
+    directory: /packages/fastapi-reloader
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
+    directory: /packages/hmr-daemon
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
+    directory: /packages/mcp-hmr
     schedule:
       interval: daily
   - package-ecosystem: github-actions

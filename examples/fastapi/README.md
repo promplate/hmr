@@ -20,10 +20,10 @@ Once the server is started, you can access the Swagger API docs at `http://local
 - Try modifying the response in `a.py` or `b.py`.
 - Rerun the endpoints in the documentation to see the changes applied instantly without restarting the server.
 
-Also, if you add the `--reload` option (note that it is not the same meaning as `--reload` in the original `uvicorn`):
+Also, if you add the `--refresh` option (note that it is not the same as `--reload` in standard Uvicorn):
 
 ```sh
-uvicorn-hmr main:app --reload
+uvicorn-hmr main:app --refresh
 ```
 
 It will enable the `fastapi-reloader` feature, which refreshes the browser automatically when changes are detected in the code.

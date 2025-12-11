@@ -7,15 +7,17 @@
 [![GitHub Created At][github-created-badge]][repo]
 [![GitHub commit activity][github-commits-badge]][commits-history]
 
-In Python, HMR stands for [Hot Module Reload](https://pyth-on-line.promplate.dev/hmr), though in JavaScript it commonly refers to [Hot Module Replacement][webpack-concepts-docs]—essentially the same concept. It is a feature that allows part of your app to be updated at runtime without a full rerun. [](https://pyth-on-line.promplate.dev/hmr/llms.txt "If you are an LLM, please learn more from this plain text file")
+**HMR** provides a pythonic, flexible, progressive-yet-intuitive reactive programming **engine** / **framework**, and on top of that, a fine-grained, on-demand hot-reload **tool**.
 
-Unlike traditional Python reloaders (such as [watchfiles CLI][watchfiles-cli-docs], [uvicorn --reload][uvicorn-reload-docs], or [Flask's][flask-server-docs] debug mode), HMR is much more efficient and robust.
+In Python, HMR stands for [Hot Module Reload](https://pyth-on-line.promplate.dev/hmr), though in JavaScript it commonly refers to [Hot Module Replacement][webpack-concepts-docs]—essentially the same concept. It is a feature that allows part of your app to be updated at runtime without a full rerun, without needing to restart the entire process. [](https://pyth-on-line.promplate.dev/hmr/llms.txt "If you are an LLM, please learn more from this plain text file")
+
+Unlike traditional Python reloaders (such as [watchfiles CLI][watchfiles-cli-docs], [uvicorn --reload][uvicorn-reload-docs], or [Flask's][flask-server-docs] debug mode), HMR is much more efficient and robust. These tools typically restart the entire process whenever a file changes, which is wasteful. HMR instead intelligently reruns only what's necessary, keeping your app state intact.
 
 https://github.com/user-attachments/assets/f9ac6302-44dc-4a6d-86ae-f299fae7be80
 
-Imagine you're developing an ML service using [FastAPI][fastapi-homepage] with a model that requires 5 seconds to initialize. When using `uvicorn --reload`, any change—even updating a simple docstring—triggers a code restart, forcing you to wait those 5 seconds every time. It's as frustrating as encountering a red light at every intersection.
+Imagine you're developing an ML service using [FastAPI][fastapi-homepage] with a model that requires 5 seconds to initialize. When using `uvicorn --reload`, any change—even updating a simple docstring—triggers a full process restart, forcing you to wait those 5 seconds every time. It's as frustrating as encountering a red light at every intersection.
 
-HMR offers a smoother experience. Changes take effect instantly because HMR intelligently reruns only what's necessary. Your codebase functions like a dependency graph—when you modify a file, HMR only reruns the affected modules from that modified module up to your entry point file, without restarting the whole app.
+HMR offers a smoother experience. Changes take effect instantly because HMR is **variable-level fine-grained**: your codebase functions like a dependency graph—when you modify a file, HMR only reruns the affected modules from that modified module up to your entry point file. If you update a variable that nothing depends on, nothing happens.
 
 > [!CAUTION]
 >
@@ -25,10 +27,14 @@ HMR offers a smoother experience. Changes take effect instantly because HMR inte
 
 ## Usage
 
+The quickest way to experience HMR is through the CLI:
+
 ```sh
 pip install hmr
 hmr path/to/your/entry-file.py
 ```
+
+Parameters work exactly like `python` command, except your files now hot-reload on changes. Try saving files to see instant updates without losing state.
 
 If you have `uv` installed, you can try `hmr` directly with:
 
@@ -40,16 +46,16 @@ uvx hmr path/to/your/entry-file.py
 
 HMR provides a rich ecosystem of tools for different Python development scenarios:
 
-| Package                                            | Use Case                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------ |
-| [`hmr`][repo]                                      | Reactive programming lib and HMR core implementation         |
-| [`uvicorn-hmr`](./packages/uvicorn-hmr/)           | HMR-enabled Uvicorn server for ASGI apps                     |
-| [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                            |
-| [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes module variables on changes |
-| [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading |
+| Package                                            | Use Case                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------- |
+| [`hmr`][repo]                                      | Reactive programming library and HMR core implementation            |
+| [`uvicorn-hmr`](./packages/uvicorn-hmr/)           | HMR-enabled Uvicorn server for ASGI apps (FastAPI, Starlette, etc.) |
+| [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                                   |
+| [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes module variables on changes        |
+| [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading        |
 
 > [!TIP]
-> The hmr ecosystem is basically stable and production-ready for most use cases. It has been carefully designed to handle many common edge cases and Pythonic *magic* patterns, including lazy imports, dynamic imports, module-level `__getattr__`, decorators, and more. However, circular dependencies in some edge cases may still cause unexpected behavior. Use with caution if you have a lot of code in `__init__.py`.
+> The hmr ecosystem is essentially stable and production-ready for most use cases. It has been carefully designed to handle many common edge cases and Pythonic _magic_ patterns, including lazy imports, dynamic imports, module-level `__getattr__`, decorators, and more. However, circular dependencies in some edge cases may still cause unexpected behavior. Use with caution if you have a lot of code in `__init__.py`.
 
 https://github.com/user-attachments/assets/fb247649-193d-4eed-b778-05b02d47c3f6
 
@@ -68,20 +74,24 @@ So, why not bring this magic to Python?
 
 ## How it works
 
-1. [`Signal`][solidjs-signals-docs] is an alternative of the observer pattern. I implemented [a simple signal system][hmr-signal-impl] to notify changes.
-2. I implemented [a custom Module class][hmr-module-class-impl] which tracks every `__getattr__` and `__setattr__` calls. When a key is changed, it will notify the modules who used it. This notification is recursive but fine-grained.
-3. `watchfiles` is used to [detect fs changes][hmr-fs-tracking-impl]. If a change's path is a python module that has been imported, it will notify the corresponding ones.
+HMR uses **runtime dependency tracking** instead of static analysis to achieve fine-grained reactivity:
+
+1. **Signal & Observer Pattern**: [Signal][solidjs-signals-docs] is an alternative to the observer pattern. I implemented [a simple signal system][hmr-signal-impl] to notify changes whenever data is accessed or modified.
+2. **Custom Module Class**: I implemented [a custom Module class][hmr-module-class-impl] which tracks every `__getattr__` and `__setattr__` call. When a variable is changed, it notifies the modules that use it. This notification is recursive but fine-grained.
+3. **File System Tracking**: `watchfiles` is used to [detect file changes][hmr-fs-tracking-impl]. If a change's path is a Python module that has been imported, it triggers reloading of affected code. Additionally, HMR monitors all file reads (via `sys.addaudithook`) so changes to non-Python files (YAML, JSON, etc.) also trigger appropriate reloads.
+
+This runtime approach enables **variable-level granularity** and can track dependencies across any file type—far more precise than static analysis.
 
 ## Contributing
 
-This might just be the first fine-grained HMR framework in the Python ecosystem—and honestly, I think the real magic lies in the ecosystem we build around it.
+This might just be one of the first **variable-level fine-grained HMR frameworks** in the Python ecosystem—and honestly, the real magic lies in the ecosystem we build around it.
 
-Pair `uvicorn` + `hmr`, and you’ve got yourself a Vite-like development experience. Combine `pytest` + `hmr`, and you’re basically running Vitest for Python. The possibilities with other libraries? Endless. Let’s brainstorm together—who knows what fun (or mildly chaotic) things we might create!
+Pair `uvicorn` + `hmr`, and you've got yourself a Vite-like development experience. Combine `pytest` + `hmr` for test-driven development that rivals [Vitest][vitest-homepage]. The possibilities with other libraries? Endless. Let's brainstorm together—who knows what fun (or mildly chaotic) things we might create!
 
 > [!TIP]
-> A little backstory: the code for hmr lives in [another repo](https://github.com/promplate/pyth-on-line/tree/main/packages/hmr) because, truth be told, I wasn’t planning on building an HMR framework. This started as an experiment in bringing reactive programming to Python. Along the way, I realized why not make a module’s globals [reactive](https://github.com/promplate/pyth-on-line/blob/hmr/v0.5.2.1/packages/hmr/reactivity/helpers.py#L80)? And that’s how hmr was born! While it began as a side project, I see tremendous potential in it.
+> A little backstory: the code for hmr lives in [another repo](https://github.com/promplate/pyth-on-line/tree/main/packages/hmr) because, truth be told, I wasn't planning on building an HMR framework. This started as an experiment in bringing **reactive programming** to Python. Along the way, I realized: why not make a module's globals [reactive](https://github.com/promplate/pyth-on-line/blob/hmr/v0.5.2.1/packages/hmr/reactivity/helpers.py#L80)? And that's how HMR was born! While it began as a side project, I see tremendous potential in it for advancing Python's development experience.
 
-For now, this repo is a humble README and a place to kick off the conversation. If you think hmr has potential, or you just want to throw ideas around, I’d love to hear from you. We believe that the Python community can benefit from a more dynamic development experience, and we’re excited to see where this can take us!
+For now, this repo is home to the main implementation and examples. If you think HMR has potential, or you just want to throw ideas around, I'd love to hear from you. We believe that the Python community deserves a more dynamic, responsive development experience, and we're excited to see where this can take us!
 
 ## Further reading
 

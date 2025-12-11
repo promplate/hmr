@@ -9,6 +9,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/promplate/hmr"
+Documentation = "https://hmr.promplate.dev"
+Repository = "https://github.com/promplate/hmr/tree/HEAD/packages/fastapi-reloader"
 
 [build-system]
 requires = ["pdm-backend"]

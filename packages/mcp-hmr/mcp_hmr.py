@@ -4,14 +4,16 @@ from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 
-__version__ = "0.0.2.3"
+__version__ = "0.0.3"
+
+__all__ = "mcp_server", "run_with_hmr"
 
 
-async def run_with_hmr(target: str, log_level: str | None = None):
+def mcp_server(target: str):
     module, attr = target.rsplit(":", 1)
 
     from asyncio import Event, Lock, TaskGroup
-    from contextlib import contextmanager, suppress
+    from contextlib import asynccontextmanager, contextmanager, suppress
 
     import mcp.server
     from fastmcp import FastMCP
@@ -32,9 +34,9 @@ async def run_with_hmr(target: str, log_level: str | None = None):
                 if mounted_server.server is proxy:
                     base_app._mounted_servers.remove(mounted_server)  # noqa: SLF001
                     with suppress(AttributeError):
-                        base_app._tool_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
-                        base_app._resource_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
-                        base_app._prompt_manager._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                        base_app._tool_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
+                        base_app._resource_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
+                        base_app._prompt_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
                     break
 
     lock = Lock()
@@ -59,6 +61,7 @@ async def run_with_hmr(target: str, log_level: str | None = None):
 
     stop_event: Event | None = None
     finish_event: Event = ...  # type: ignore
+    tg: TaskGroup = ...  # type: ignore
 
     @async_effect(context=HMR_CONTEXT, call_immediately=False)
     async def main():
@@ -91,8 +94,26 @@ async def run_with_hmr(target: str, log_level: str | None = None):
             if stop_event:
                 stop_event.set()
 
-    async with TaskGroup() as tg, Reloader():
-        await base_app.run_stdio_async(show_banner=False, log_level=log_level)
+    @asynccontextmanager
+    async def _():
+        nonlocal tg
+        async with TaskGroup() as tg, Reloader():
+            yield base_app
+
+    return _()
+
+
+async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
+    async with mcp_server(target) as mcp:
+        match transport:
+            case "stdio":
+                await mcp.run_stdio_async(show_banner=False, log_level=log_level)
+            case "http" | "streamable-http":
+                await mcp.run_http_async(log_level=log_level, **kwargs)
+            case "sse":
+                await mcp.run_sse_async(log_level=log_level, **kwargs)
+            case _:
+                await mcp.run_async(transport, log_level=log_level, **kwargs)  # type: ignore
 
 
 def cli(argv: list[str] = sys.argv[1:]):
@@ -102,7 +123,11 @@ def cli(argv: list[str] = sys.argv[1:]):
     if sys.version_info >= (3, 14):
         parser.suggest_on_error = True
     parser.add_argument("target", help="The import path of the FastMCP instance. Supports module:attr and path:attr")
+    parser.add_argument("-t", "--transport", choices=["stdio", "http", "sse", "streamable-http"], default="stdio", help="Transport protocol to use (default: stdio)")
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], type=str.upper, default=None)
+    parser.add_argument("--host", default="localhost", help="Host to bind to for http/sse transports (default: localhost)")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind to for http/sse transports (default: 8000)")
+    parser.add_argument("--path", default=None, help="Route path for the server (default: /mcp for http, /mcp/sse for sse)")
     parser.add_argument("--version", action="version", version=f"mcp-hmr {__version__}", help=SUPPRESS)
 
     if not argv:
@@ -134,7 +159,7 @@ def cli(argv: list[str] = sys.argv[1:]):
             parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
     with suppress(KeyboardInterrupt):
-        run(run_with_hmr(target, args.log_level))
+        run(run_with_hmr(**args.__dict__))
 
 
 if __name__ == "__main__":

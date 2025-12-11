@@ -24,3 +24,35 @@ mcp-hmr main:app
 ```
 
 Now, whenever you save changes to your source code, the server will automatically reload without dropping the connection to the client.
+
+## Options
+
+The options are aligned with those of [`fastmcp run`](https://gofastmcp.com/patterns/cli#fastmcp-run), providing a familiar interface if you're already using FastMCP.
+
+```sh
+mcp-hmr --help
+```
+
+The command supports the following options:
+
+| Option               | Description                                                   | Default                           |
+| -------------------- | ------------------------------------------------------------- | --------------------------------- |
+| `--transport` / `-t` | Transport protocol: `stdio`, `sse`, `http`, `streamable-http` | `stdio`                           |
+| `--log-level` / `-l` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`    | -                                 |
+| `--host`             | Host to bind to for HTTP/SSE transports                       | `localhost`                       |
+| `--port`             | Port to bind to for HTTP/SSE transports                       | `8000`                            |
+| `--path`             | Route path for the server                                     | `/mcp` (http) or `/mcp/sse` (sse) |
+
+### Examples
+
+Start with HTTP transport on custom host, port and path:
+
+```sh
+mcp-hmr main:app -t http --host 0.0.0.0 --port 56789 --path /
+```
+
+Start with debug logging:
+
+```sh
+mcp-hmr main:app -l DEBUG
+```

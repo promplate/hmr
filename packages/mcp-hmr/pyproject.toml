@@ -26,8 +26,9 @@ mcp-hmr = "mcp_hmr:cli"
 
 [project.urls]
 Homepage = "https://github.com/promplate/hmr"
+Documentation = "https://hmr.promplate.dev"
+Repository = "https://github.com/promplate/hmr/tree/HEAD/packages/mcp-hmr"
 
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
-
