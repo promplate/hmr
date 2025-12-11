@@ -47,6 +47,12 @@ nav = [
             { "<code>.hmr.run</code>" = "references/hmr/run.md" },
             { "<code>.hmr.exec_hack</code>" = "references/hmr/exec_hack.md" },
         ] },
+        { "Integrations" = [
+            { "<code>hmr-daemon</code>" = "references/hmr-daemon.md" },
+            { "<code>uvicorn-hmr</code>" = "references/uvicorn-hmr.md" },
+            { "<code>fastapi-reloader</code>" = "references/fastapi-reloader.md" },
+            { "<code>mcp-hmr</code>" = "references/mcp-hmr.md" },
+        ] },
     ] },
 ]
 
