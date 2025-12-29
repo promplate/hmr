@@ -4,7 +4,7 @@ from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 
-__version__ = "0.0.3.1"
+__version__ = "0.0.3.2"
 
 __all__ = "mcp_server", "run_with_hmr"
 
@@ -52,7 +52,9 @@ def mcp_server(target: str):
 
         @derived(context=HMR_CONTEXT)
         def get_app():
-            return getattr(module_from_spec(ModuleSpec("server_module", _loader, origin=module)), attr)
+            if (mod := sys.modules.get("server_module")) is None:
+                sys.modules["server_module"] = mod = module_from_spec(ModuleSpec("server_module", _loader, origin=module))
+            return getattr(mod, attr)
 
     else:  # path:attr
 
