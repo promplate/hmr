@@ -164,6 +164,9 @@ def cli(argv: list[str] = sys.argv[1:]):
 
         args.middleware = [Middleware(cors.CORSMiddleware, allow_origins="*", allow_methods="*", allow_headers="*", expose_headers="*")]
 
+    if args.transport != "stdio":
+        args.uvicorn_config = {"timeout_graceful_shutdown": 1e-100}  # align with upstream behavior but prevent error messages when no clients are connected
+
     from asyncio import run
     from contextlib import suppress
 
