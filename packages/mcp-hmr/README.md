@@ -102,7 +102,7 @@ This is useful when you want to extend your server with additional features like
 > 3. Hot reloading only works within the `async with mcp_server(...) as mcp:` block. Especially caution for cases that code implicitly exit this block like:
 >
 > ```python
-> async with anyio.create_task_group() as tg mcp_server("path/to/mcp-server.py:mcp") as mcp:
+> async with anyio.create_task_group() as tg, mcp_server("path/to/mcp-server.py:mcp") as mcp:
 >     tg.start_soon(mcp.run_async)
 > ```
 >

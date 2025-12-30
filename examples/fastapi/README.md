@@ -10,7 +10,7 @@ After installing dependencies, run the following command in this directory:
 uvicorn-hmr main:app
 ```
 
-This will start a FastAPI development server with HOT-reloading enabled.
+This will start a FastAPI development server with hot-reloading enabled.
 
 ## What to Observe
 
@@ -28,4 +28,4 @@ uvicorn-hmr main:app --refresh
 
 It will enable the `fastapi-reloader` feature, which refreshes the browser automatically when changes are detected in the code.
 
-Try modifying the route names or add some route handlers, and you will see the docs page refresh automatically to reflect your changes.
+Try modifying the route names or adding some route handlers, and you will see the docs page refresh automatically to reflect your changes.
