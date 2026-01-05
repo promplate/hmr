@@ -9,6 +9,37 @@ __version__ = "0.0.3.2"
 __all__ = "mcp_server", "run_with_hmr"
 
 
+def _resolve_watch_path(module_or_path: str) -> str:
+    """Resolve a stable watch directory for hot reload.
+
+    Why this exists:
+        `AsyncReloader` expects a non-empty, valid path to watch. In mcp-hmr 0.0.3.2
+        the watcher was initialized with an empty string, which can result in no
+        files being watched (or errors) depending on the platform / watcher backend.
+
+    Strategy:
+        - If the target is a file path, watch its parent directory.
+        - If the target is an importable module, watch the directory containing the
+          module's file (or package __init__.py).
+        - Fall back to the current working directory.
+    """
+    # path:attr target
+    if (p := Path(module_or_path)).is_file():
+        return str(p.resolve().parent)
+
+    # module:attr target
+    spec = find_spec(module_or_path)
+    if spec is not None:
+        if spec.origin:
+            # For packages, origin points at __init__.py; for modules, origin is the .py file.
+            return str(Path(spec.origin).resolve().parent)
+        if spec.submodule_search_locations:
+            # Namespace packages may have no origin; use their search location.
+            return str(Path(next(iter(spec.submodule_search_locations))).resolve())
+
+    return str(Path.cwd())
+
+
 def mcp_server(target: str):
     module, attr = target.rsplit(":", 1)
 
@@ -80,7 +111,7 @@ def mcp_server(target: str):
 
     class Reloader(AsyncReloader):
         def __init__(self):
-            super().__init__("")
+            super().__init__(_resolve_watch_path(module))
             self.error_filter.exclude_filenames.add(__file__)
 
         async def __aenter__(self):
