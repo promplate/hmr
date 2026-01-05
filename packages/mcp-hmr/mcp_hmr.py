@@ -24,18 +24,33 @@ def _resolve_watch_path(module_or_path: str) -> str:
         - Fall back to the current working directory.
     """
     # path:attr target
-    if (p := Path(module_or_path)).is_file():
+    p = Path(module_or_path)
+    if p.is_file():
         return str(p.resolve().parent)
 
+    # Some callers may provide a directory path directly; watch it as-is.
+    if p.is_dir():
+        return str(p.resolve())
+
     # module:attr target
-    spec = find_spec(module_or_path)
+    try:
+        spec = find_spec(module_or_path)
+    except (ImportError, ModuleNotFoundError, TypeError, ValueError):
+        spec = None
+
     if spec is not None:
-        if spec.origin:
-            # For packages, origin points at __init__.py; for modules, origin is the .py file.
-            return str(Path(spec.origin).resolve().parent)
-        if spec.submodule_search_locations:
-            # Namespace packages may have no origin; use their search location.
-            return str(Path(next(iter(spec.submodule_search_locations))).resolve())
+        # For built-in / frozen modules, spec.origin can be strings like "built-in".
+        # Use has_location to ensure origin is a real filesystem location.
+        if getattr(spec, "has_location", False) and spec.origin:
+            origin_path = Path(spec.origin)
+            if origin_path.is_file():
+                # For packages, origin points at __init__.py; for modules, origin is the .py file.
+                return str(origin_path.resolve().parent)
+
+        # Namespace packages may have no origin; use their search location.
+        locations = list(spec.submodule_search_locations or ())
+        if locations:
+            return str(Path(locations[0]).resolve())
 
     return str(Path.cwd())
 
