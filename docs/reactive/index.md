@@ -24,7 +24,7 @@ Once dependencies are tracked, "reactive" means automatic reactions to data chan
 
 ## Signals and Effects
 
-In HMR, there are two core primitives: [Signal](signals.md){ data-preview } and [Effect](effects.md){ data-preview }. A Signal acts as a data source:
+In HMR, there are two core primitives: [Signal](signals.md) and [Effect](effects.md). A Signal acts as a data source:
 
 ```python
 from reactivity import signal
@@ -70,7 +70,7 @@ This prints 1, even without explicitly calling `#!py print(s.get())` again.
 
 ## Idempotent Computations
 
-HMR provides another primitive: [Derived](derived.md){ data-preview }, representing data processing pipelines. Values are cached if dependencies haven't changed. Computation is lazy, unlike [Effects](#signals-and-effects){ data-preview }, which are uncached and should not be used for returning values. Effects are about "what to do with data" while Derived is about "returning processed data".
+HMR provides another primitive: [Derived](derived.md), representing data processing pipelines. Values are cached if dependencies haven't changed. Computation is lazy, unlike [Effects](#signals-and-effects), which are uncached and should not be used for returning values. Effects are about "what to do with data" while Derived is about "returning processed data".
 
 ```python
 from reactivity import signal, derived
@@ -108,7 +108,7 @@ print(f())
 
 ## Dependency Graph
 
-Signals, Derived, and Effects form the complete [reactive primitives](advanced.md){ data-preview }. Imagine a graph: leftmost nodes are pure data sources (inputs, files, time), depending on nothing. Rightmost nodes are Effects, depended by nothing. Middle nodes are intermediate computations, depending on left nodes and depended by right nodes.
+Signals, Derived, and Effects form the complete [reactive primitives](advanced.md). Imagine a graph: leftmost nodes are pure data sources (inputs, files, time), depending on nothing. Rightmost nodes are Effects, depended by nothing. Middle nodes are intermediate computations, depending on left nodes and depended by right nodes.
 
 ```python
 from reactivity import signal, derived, effect
@@ -146,7 +146,7 @@ The same model extends to async code.
 - `async_derived` is still cached and lazy, but you read it with `await value()`
 - Async primitives should be created inside an active async runtime, or with an explicit `task_factory`
 
-For the full semantics and runnable examples, see [Async Reactive Primitives](../references/reactivity/async_primitives.md "Async Reactive Primitives").
+For the full semantics and runnable examples, see [Async Reactive Primitives](../references/reactivity/async_primitives.md).
 
 ---
 
@@ -188,4 +188,4 @@ Thanks to meticulous engineering and perfectionism, HMR brings instant feedback 
 
 ## What's Next
 
-For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to [signals](signals.md){ data-preview }, [derived](derived.md){ data-preview }, [effects](effects.md){ data-preview }, [advanced](advanced.md){ data-preview }, and [Async Reactive Primitives](../references/reactivity/async_primitives.md "Async Reactive Primitives").
+For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to [signals](signals.md), [derived](derived.md), [effects](effects.md), [advanced](advanced.md), and [Async Reactive Primitives](../references/reactivity/async_primitives.md).

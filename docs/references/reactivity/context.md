@@ -17,6 +17,6 @@ This module becomes more interesting when you want:
 In particular, async primitives use the context's async execution state to keep tracking coherent after `await`.
 That is why async reactivity in HMR is more than "just check the call stack".
 
-For a higher-level introduction, see [Advanced Reactivity](../../reactive/advanced.md "Advanced Reactivity") and [Async Reactive Primitives](./async_primitives.md "Async Reactive Primitives").
+For a higher-level introduction, see [Advanced Reactivity](../../reactive/advanced.md) and [Async Reactive Primitives](./async_primitives.md).
 
 ::: reactivity.context
