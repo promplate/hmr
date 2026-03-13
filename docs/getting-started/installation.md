@@ -18,10 +18,12 @@ Install the CLI and libraries you need.
 pip install hmr
 ```
 
-- Run without installing (via uv/pnpm/bun wrappers):
+- Run without installing (for example with `uvx` or `pipx run`):
 
 ```sh
 uvx hmr path/to/entry.py
+# or
+pipx run hmr path/to/entry.py
 ```
 
 Optional integrations:

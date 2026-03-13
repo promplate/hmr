@@ -36,6 +36,8 @@ Or using module import format:
 mcp-hmr main:app
 ```
 
+`mcp-hmr` is meant to be a drop-in replacement for `mcp run ...` / `fastmcp run ...`, but with HMR enabled.
+
 Notes on behavior
 
 - The running MCP server keeps existing connections. When a changed module updates tools/resources, the server replaces the implementation in-place and the next tool invocation uses the new code.
@@ -58,18 +60,29 @@ Example: simple server structure (see [examples/mcp/](../../examples/mcp/ "MCP e
 
 ```python
 # main.py
-from mcp.server.fastmcp import FastMCP
-from tools import echo  # keep tools small and pure
+from fastmcp import FastMCP
 
-server = FastMCP("My Server")
-server.add_tool(echo)
-server.run()
+app = FastMCP()
+
+
+@app.tool()
+def echo(message: str):
+    return message
+
+
+@app.resource("example://greet")
+def greet():
+    return "hello world"
+
+
+if __name__ == "__main__":
+    app.run("stdio")
 ```
 
 On code change
 
-- Edit `my_app/tools.py` and save.
-- HMR reloads the module and updates the server's tool binding if it was wired via module-level imports or registration hooks.
+- Edit `main.py` or a helper module imported by it and save.
+- HMR reloads the changed module and the MCP app exported as `app` keeps serving the updated implementation.
 
 Debugging and caveats
 

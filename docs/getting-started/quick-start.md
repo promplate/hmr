@@ -10,21 +10,23 @@ icon: lucide/coffee
 
 # Quick Start
 
-Let's create a simple example to see HMR in action.
+Let's create a minimal example that shows HMR rerunning a dependent module without restarting the process.
 
-## 1. Create a file
+## 1. Create two files
+
+Create `greet.py`:
+
+```python
+def message():
+    return "Hello, World!"
+```
 
 Create `main.py`:
 
 ```python
-# main.py
-import time
+from greet import message
 
-i = 0
-while True:
-    i += 1
-    print(f"Hello, World! {i}")
-    time.sleep(1)
+print(message())
 ```
 
 ## 2. Run with HMR
@@ -36,38 +38,26 @@ hmr main.py
 You should see:
 
 ```text
-Hello, World! 1
-Hello, World! 2
-Hello, World! 3
-...
+Hello, World!
 ```
 
-## 3. Edit and watch it reload
+## 3. Edit the dependency and watch it reload
 
-Without stopping the script, change the print statement:
+Without stopping `hmr`, change `greet.py`:
 
 ```python
-# main.py
-import time
-
-i = 0
-while True:
-    i += 1
-    print(f"HMR is amazing! {i}")  # Changed this line
-    time.sleep(1)
+def message():
+    return "HMR is working!"
 ```
 
-Save the file. The output changes instantly:
+Save the file. HMR reloads `greet.py`, notices that `main.py` depends on it, and reruns `main.py`:
 
 ```text
-...
-Hello, World! 5
-HMR is amazing! 6
-HMR is amazing! 7
-...
+Hello, World!
+HMR is working!
 ```
 
-Notice that `i` continued from where it was. The process didn't restart—only the changed code was reloaded. This is the power of HMR: instant updates with preserved state.
+The process stays alive waiting for more changes; press `Ctrl+C` when you want to stop it.
 
 ## Framework Examples
 
@@ -88,7 +78,7 @@ hmr start.py  # where start.py creates and runs your Flask app
 
 ```sh
 pip install mcp-hmr
-mcp-hmr server:app
+mcp-hmr main:app
 ```
 
 ## Next Steps
@@ -96,3 +86,5 @@ mcp-hmr server:app
 - Explore [reactive primitives](../reactive/signals.md "Signals") for building reactive applications
 - Read [integration guides](../integrations/uvicorn.md "ASGI — uvicorn-hmr") for framework-specific patterns
 - Check [advanced patterns](../reactive/advanced.md "Advanced Reactivity") for best practices
+
+For long-running servers and dev workflows, prefer the dedicated wrappers like `uvicorn-hmr`, `mcp-hmr`, or `hmr-daemon`.

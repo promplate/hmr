@@ -10,7 +10,7 @@ icon: lucide/star
 
 # What is HMR
 
-HMR (Hot Module Reload / Hot Module Replacement) updates running Python code when source files change, without restarting the whole process. Only the changed module and the code that depends on it are re-executed, preserving in-memory state and speeding up your edit-test loop.
+HMR (Hot Module Reload / Hot Module Replacement) updates running Python code when source files change, without restarting the whole process. Only the changed module and the code that depends on it are re-executed, which helps preserve state in unaffected modules and speeds up your edit-test loop.
 
 ## Why HMR?
 
@@ -68,7 +68,7 @@ pip install uvicorn-hmr
 uvicorn-hmr main:app
 
 pip install mcp-hmr
-mcp-hmr server:app
+mcp-hmr main:app
 ```
 
 **3. As a library** (reactive primitives)
@@ -89,13 +89,13 @@ def logger():
 
 ## Ecosystem
 
-| Package                                                                                                      | Use Case                                               |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| [`hmr`](https://pypi.org/project/hmr/ "hmr core package")                                                    | Reactive programming lib and hot reloading             |
-| [`uvicorn-hmr`](https://pypi.org/project/uvicorn-hmr/ "HMR-enabled Uvicorn server for ASGI apps")            | ASGI integration (FastAPI, etc.)                       |
-| [`mcp-hmr`](https://pypi.org/project/mcp-hmr/ "HMR-enabled MCP/FastMCP server")                              | MCP server integration                                 |
-| [`fastapi-reloader`](https://pypi.org/project/fastapi-reloader/ "An ASGI middleware for browser refreshing") | A plugin for `uvicorn-hmr` to auto-refresh the browser |
-| [`hmr-daemon`](https://pypi.org/project/hmr-daemon/ "Background daemon that refreshes modules on changes")   | Keep variables up-to-date in a daemon thread           |
+| Package                                                                                                      | Use Case                                                          |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [`hmr`](https://pypi.org/project/hmr/ "hmr core package")                                                    | Reactive programming lib and hot reloading                        |
+| [`uvicorn-hmr`](https://pypi.org/project/uvicorn-hmr/ "HMR-enabled Uvicorn server for ASGI apps")            | ASGI integration (FastAPI, etc.)                                  |
+| [`mcp-hmr`](https://pypi.org/project/mcp-hmr/ "HMR-enabled MCP/FastMCP server")                              | MCP server integration                                            |
+| [`fastapi-reloader`](https://pypi.org/project/fastapi-reloader/ "An ASGI middleware for browser refreshing") | Browser auto-refresh for ASGI apps, often used with `uvicorn-hmr` |
+| [`hmr-daemon`](https://pypi.org/project/hmr-daemon/ "Background daemon that refreshes modules on changes")   | Keep variables up-to-date in a daemon thread                      |
 
 ## Next Steps
 

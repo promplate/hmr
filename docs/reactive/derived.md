@@ -23,7 +23,7 @@ from reactivity import signal, derived, memoized, effect
 
 [`derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L262 "hmr reactivity: Derived class — GitHub") is for **lazy, pull-based** computations. It only re-calculates when its value is requested.
 
-[`memoized`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/helpers.py#L10 "hmr reactivity: Memoized class — GitHub") is for **cached computations with dependency tracking**. It caches results and invalidates them when dependencies change, recomputing only when accessed.
+[`memoized`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/helpers.py#L10 "hmr reactivity: Memoized class — GitHub") is the function-cache variant. It stores the last result, becomes stale when its dependencies change, and recomputes on the next call.
 
 ## Example
 
@@ -63,7 +63,7 @@ print(f())
 
 ## Tips
 
-- `derived` for lazy computed values; `memoized` for cached computations that track dependencies
+- `derived` for lazy computed values; `memoized` for function-style caching around reactive reads
 - Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L218 "hmr reactivity: Batch class — GitHub") and contexts
 - Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") for async computations
 - Unlike effects, derived values are about returning processed data, not performing side effects
