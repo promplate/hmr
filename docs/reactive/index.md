@@ -6,13 +6,15 @@ icon: lucide/power
 
 _A little backstory: **reactive programming** is an evolution of the **observer pattern**._
 
-The [observer pattern](https://en.wikipedia.org/wiki/Observer_pattern "Observer pattern — Wikipedia") provides an intuitive [event-driven programming](https://en.wikipedia.org/wiki/Event-driven_programming "Event-driven programming — Wikipedia") paradigm, treating **data** _(subjects)_ and **observers** as fundamental objects. When data changes, observers are notified and update accordingly.
+The [observer pattern](https://en.wikipedia.org/wiki/Observer_pattern "Observer pattern - Wikipedia") provides an intuitive [event-driven programming](https://en.wikipedia.org/wiki/Event-driven_programming "Event-driven programming - Wikipedia") paradigm, treating **data** _(subjects)_ and **observers** as fundamental objects. When data changes, observers are notified and update accordingly.
 
 But typical observer patterns require **manually binding dependency relationships between subjects and observers**. Reactive programming automates dependency tracking.
 
 ??? info "How this works?"
 
-    The principle is simple: [call stacks](https://docs.python.org/3/library/inspect.html#inspect.stack "inspect.stack — Python docs") record dependencies between calls. If we consider A calling B as A depending on B, then the relative positions in the call stack reveal the dependency relationships.
+    A helpful starting point is the [call stack](https://docs.python.org/3/library/inspect.html#inspect.stack "inspect.stack - Python docs"): if A calls B, then A depends on B. In synchronous code, the current stack is often enough to explain what gets tracked.
+
+    But HMR's implementation is not limited to plain stack inspection. In asynchronous code it carries the reactive execution context forward as coroutines run, so dependency tracking can continue across `await` boundaries too.
 
 Once dependencies are tracked, "reactive" means automatic reactions to data changes. If **A** depends on B and C, then **A** reacts to B and C; B and C are **A**'s dependencies. That's reactive programming in essence.
 
@@ -68,7 +70,7 @@ This prints 1, even without explicitly calling `#!py print(s.get())` again.
 
 ## Idempotent Computations
 
-HMR provides another primitive: [Derived](derived.md){ data-preview }, representing data processing pipelines. Values are cached if dependencies haven't changed. Computation is lazy (unlike [Effects](#signals-and-effects){ data-preview }, which are uncached and shouldn't return values—Effects are about "what to do with data" while Derived is about "returning processed data").
+HMR provides another primitive: [Derived](derived.md){ data-preview }, representing data processing pipelines. Values are cached if dependencies haven't changed. Computation is lazy, unlike [Effects](#signals-and-effects){ data-preview }, which are uncached and should not be used for returning values. Effects are about "what to do with data" while Derived is about "returning processed data".
 
 ```python
 from reactivity import signal, derived
@@ -106,7 +108,7 @@ print(f())
 
 ## Dependency Graph
 
-Signals, Derived, and Effects form the complete [reactive primitives](advanced.md){ data-preview }. Imagine a graph (like neural network visualizations): leftmost nodes are pure data sources (inputs/files/time), depending on nothing. Rightmost are Effects, depending on nothing else. Middle nodes are intermediate computations, depending on left nodes and depended on by right nodes.
+Signals, Derived, and Effects form the complete [reactive primitives](advanced.md){ data-preview }. Imagine a graph: leftmost nodes are pure data sources (inputs, files, time), depending on nothing. Rightmost nodes are Effects, depended by nothing. Middle nodes are intermediate computations, depending on left nodes and depended by right nodes.
 
 ```python
 from reactivity import signal, derived, effect
@@ -135,6 +137,17 @@ s.set(3)
 
 HMR's reactivity engine handles all this behind the scenes: ensuring idempotent operations don't rerun unnecessarily, while guaranteeing data changes are reflected without being lost.
 
+## Async Variants
+
+The same model extends to async code.
+
+- `async_effect` is the async counterpart of `effect`
+- `async_derived` is the async counterpart of `derived`
+- `async_derived` is still cached and lazy, but you read it with `await value()`
+- Async primitives should be created inside an active async runtime, or with an explicit `task_factory`
+
+For the full semantics and runnable examples, see [Async Reactive Primitives](../references/reactivity/async_primitives.md "Async Reactive Primitives").
+
 ---
 
 Let's take a step further. Obviously, any script can be viewed this way. Local data analysis typically follows:
@@ -149,19 +162,19 @@ Even if the reactive paradigm doesn't appeal to you (I'd love to hear why in the
 
 !!! note ""
 
-    As mentioned, any script can be seen as a reactive graph (even without explicit usage). The HMR CLI embodies this philosophy. It provides a drop-in replacement for the Python CLI:
+    As mentioned, any script can be seen as a reactive graph, even without explicit usage. The HMR CLI embodies this philosophy. It provides a drop-in replacement for the Python CLI:
 
-    1. HMR **treats each file as a data source** (signal)—whether Python modules or files opened via `#!py open`/`pathlib`
+    1. HMR **treats each file as a data source** (signal), whether Python modules or files opened via `#!py open` / `pathlib`
     2. Imported **variables are derived values**
     3. The **entry file** you run with `python foo.py` or `python -m foo.bar` is an Effect, since nothing depends on it
 
-When files change (code edits or data updates), directly affected Python module reruns. Updated variables trigger dependent modules to rerun, propagating upward until the entry (or stopping earlier, like **not every butterfly wing flap causes a hurricane**).
+When files change (code edits or data updates), directly affected Python modules rerun. Updated variables trigger dependent modules to rerun, propagating upward until the entry, or stopping earlier when nothing observable changed. You know, not every butterfly wing flap causes a hurricane.
 
 Simply use `hmr ...` instead of `python ...` to run your code, and see results update instantly when saving files—saving hundreds of times the development time! Compared to your changes, `python ...` cold starts waste time on unchanged parts.
 
 !!! note ""
 
-    Although I haven't formally measured it, unless you're developing heavy libraries, your code compilation is typically less than **1‰** of third-party libraries and Python bootstrap time—this should be Python development common sense.
+    Although I haven't formally measured it, unless you're developing heavy libraries, your code compilation time is typically tiny compared with third-party imports and Python bootstrap time—this should be Python development common sense.
 
 Thanks to meticulous engineering and perfectionism, HMR brings instant feedback to every Python project.
 
@@ -171,8 +184,8 @@ Thanks to meticulous engineering and perfectionism, HMR brings instant feedback 
 
 ???+ info "Note"
 
-    While the previous section briefly touched on hot reloading implementation, this represents just one application of the reactive programming framework. Hot reloading is an optional feature that can be easily implemented with our reactivity engine, but it's not the sole purpose or requirement of this library. The reactive programming paradigm offers much broader potential beyond just development tooling, enabling sophisticated data flow management, automatic state synchronization, and interactive applications across various domains.
+    While the previous section briefly touched on hot reloading implementation, this represents just one application of the reactive programming framework. Hot reloading is an optional feature that can be easily implemented with the reactivity engine, but it's not the sole purpose or requirement of this library. The reactive programming paradigm offers much broader potential beyond just development tooling, enabling sophisticated data flow management, automatic state synchronization, and interactive applications across various domains.
 
 ## What's Next
 
-For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to [signals](signals.md){ data-preview }, [derived](derived.md){ data-preview }, [effects](effects.md){ data-preview }, and [advanced](advanced.md){ data-preview } documentation pages.
+For optional configurations of reactive primitives, reaction batching, async reactivity, etc., navigate to [signals](signals.md){ data-preview }, [derived](derived.md){ data-preview }, [effects](effects.md){ data-preview }, [advanced](advanced.md){ data-preview }, and [Async Reactive Primitives](../references/reactivity/async_primitives.md "Async Reactive Primitives").
