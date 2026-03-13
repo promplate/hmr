@@ -3,9 +3,9 @@ icon: lucide/circle-dashed
 title: Reactivity Context
 ---
 
-# Reactivity Context
+# `#!py from reactivity.context import *`
 
-`reactivity.context` defines the execution context that reactive computations run inside.
+Reactivity Contexts define the execution context that reactive computations run inside.
 
 For simple programs you usually rely on the default context implicitly.
 This module becomes more interesting when you want:

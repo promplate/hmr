@@ -3,9 +3,9 @@ icon: lucide/circle-dashed
 title: Async Reactive Primitives
 ---
 
-# Async Reactive Primitives
+# `#!py from reactivity.async_primitives import *`
 
-`reactivity.async_primitives` contains the async counterparts of HMR's core reactive primitives.
+The module `reactivity.async_primitives` contains the async counterparts of HMR's core reactive primitives.
 The dependency model is the same as the sync API, but actual work is scheduled onto an async runtime instead of running to completion inline.
 
 ## What Lives Here
