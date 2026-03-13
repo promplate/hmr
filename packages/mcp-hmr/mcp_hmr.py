@@ -4,7 +4,7 @@ from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 
-__version__ = "0.0.3.2"
+__version__ = "0.0.3.3"
 
 __all__ = "mcp_server", "run_with_hmr"
 
@@ -80,7 +80,7 @@ def mcp_server(target: str):
 
     class Reloader(AsyncReloader):
         def __init__(self):
-            super().__init__("")
+            super().__init__(".")
             self.error_filter.exclude_filenames.add(__file__)
 
         async def __aenter__(self):
