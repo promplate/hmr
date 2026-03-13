@@ -82,7 +82,58 @@ def _():
 
 ## Async
 
-[`async_effect`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L61 "hmr reactivity: AsyncEffect class — GitHub") and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") support asyncio/trio via pluggable task factories.
+[`async_effect`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L61 "hmr reactivity: AsyncEffect class — GitHub") and [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") are the async counterparts of `effect` and `derived`.
+
+The existing sync mental model still applies, but the async variants have a few usage differences that are worth stating explicitly:
+
+- `async_derived` is cached and lazy, just like `derived`, but you read it with `await value()`
+- `async_effect` reruns side effects by scheduling work onto the current async runtime
+- The default task factory supports `asyncio` and `trio`; pass `task_factory=` when you need task ownership to live in a specific `TaskGroup` or nursery
+
+```python
+from anyio import sleep
+from reactivity import signal, async_derived, async_effect
+
+s = signal(1)
+
+async def main():
+    @async_derived
+    async def doubled():
+        await sleep(0.01)
+        return s.get() * 2
+
+    @async_effect
+    async def printer():
+        print(await doubled())
+
+    await sleep(0.03)
+    s.set(2)
+    await sleep(0.03)
+```
+
+Run it with `await main()` in IPython / notebooks, or `anyio.run(main)` in a script.
+When `s.set(...)` is called, reruns are scheduled asynchronously, so you observe the update after control returns to the event loop.
+
+If you need explicit task ownership, provide a custom `task_factory`:
+
+```python
+from asyncio import TaskGroup, sleep
+from reactivity import async_effect
+
+
+async def main():
+    async with TaskGroup() as tg:
+
+        @async_effect(task_factory=lambda fn: tg.create_task(fn()), call_immediately=False)
+        async def printer():
+            await sleep(0.01)
+            print("tick")
+
+        await printer()  # manually trigger the first run
+        await sleep(0.02)
+```
+
+See the [async primitives reference](../references/reactivity/async_primitives.md "Async Reactive Primitives") for the full API surface.
 
 ## Best practices
 

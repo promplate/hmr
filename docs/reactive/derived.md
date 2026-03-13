@@ -65,7 +65,7 @@ print(f())
 
 - `derived` for lazy computed values; `memoized` for function-style caching around reactive reads
 - Both integrate with [`batch()`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/primitives.py#L218 "hmr reactivity: Batch class — GitHub") and contexts
-- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") for async computations
+- Use [`async_derived`](https://github.com/promplate/pyth-on-line/blob/hmr/v0.7.6/packages/hmr/reactivity/async_primitives.py#L75 "hmr reactivity: AsyncDerived class — GitHub") for cached async computations; read them with `await value()`
 - Unlike effects, derived values are about returning processed data, not performing side effects
 
 ## See Also
