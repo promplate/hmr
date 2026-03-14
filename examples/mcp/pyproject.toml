@@ -3,7 +3,7 @@ name = "mcp-example"
 version = "0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp~=2.13.0",
+    "fastmcp~=2.14.1",
     "mcp-hmr",
 ]
 

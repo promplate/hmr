@@ -7,7 +7,7 @@ dependencies = [
     "hmr~=0.7.0",
     "mcp-hmr",
     "mkdocstrings-python~=2.0.1",
-    "ruff~=0.14.0",
+    "ruff~=0.15.4",
     "uvicorn-hmr",
     "zensical==0.0.26",
 ]

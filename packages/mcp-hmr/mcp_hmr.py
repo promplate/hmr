@@ -4,7 +4,7 @@ from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 
-__version__ = "0.0.3"
+__version__ = "0.0.3.3"
 
 __all__ = "mcp_server", "run_with_hmr"
 
@@ -33,6 +33,7 @@ def mcp_server(target: str):
             for mounted_server in list(base_app._mounted_servers):  # noqa: SLF001
                 if mounted_server.server is proxy:
                     base_app._mounted_servers.remove(mounted_server)  # noqa: SLF001
+                    # for older FastMCP versions
                     with suppress(AttributeError):
                         base_app._tool_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
                         base_app._resource_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
@@ -51,7 +52,9 @@ def mcp_server(target: str):
 
         @derived(context=HMR_CONTEXT)
         def get_app():
-            return getattr(module_from_spec(ModuleSpec("server_module", _loader, origin=module)), attr)
+            if (mod := sys.modules.get("server_module")) is None:
+                sys.modules["server_module"] = mod = module_from_spec(ModuleSpec("server_module", _loader, origin=module))
+            return getattr(mod, attr)
 
     else:  # path:attr
 
@@ -77,7 +80,7 @@ def mcp_server(target: str):
 
     class Reloader(AsyncReloader):
         def __init__(self):
-            super().__init__("")
+            super().__init__(".")
             self.error_filter.exclude_filenames.add(__file__)
 
         async def __aenter__(self):
@@ -111,7 +114,11 @@ async def run_with_hmr(target: str, log_level: str | None = None, transport="std
             case "http" | "streamable-http":
                 await mcp.run_http_async(log_level=log_level, **kwargs)
             case "sse":
-                await mcp.run_sse_async(log_level=log_level, **kwargs)
+                # for older FastMCP versions
+                if hasattr(mcp, "run_sse_async"):
+                    await mcp.run_sse_async(log_level=log_level, **kwargs)  # type: ignore
+                else:
+                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)
             case _:
                 await mcp.run_async(transport, log_level=log_level, **kwargs)  # type: ignore
 
@@ -127,7 +134,9 @@ def cli(argv: list[str] = sys.argv[1:]):
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], type=str.upper, default=None)
     parser.add_argument("--host", default="localhost", help="Host to bind to for http/sse transports (default: localhost)")
     parser.add_argument("--port", type=int, default=None, help="Port to bind to for http/sse transports (default: 8000)")
-    parser.add_argument("--path", default=None, help="Route path for the server (default: /mcp for http, /mcp/sse for sse)")
+    parser.add_argument("--path", default=None, help="Route path for the server (default: /mcp for http, /sse for sse)")
+    parser.add_argument("--stateless", action="store_true", help="Shortcut for `stateless_http=True` and `json_response=True`")
+    parser.add_argument("--no-cors", action="store_true", help="Disable CORS (the default is to enable CORS for all origins)")
     parser.add_argument("--version", action="version", version=f"mcp-hmr {__version__}", help=SUPPRESS)
 
     if not argv:
@@ -140,6 +149,25 @@ def cli(argv: list[str] = sys.argv[1:]):
 
     if ":" not in target[1:-1]:
         parser.exit(1, f"The target argument must be in the format 'module:attr' (e.g. 'main:app') or 'path:attr' (e.g. './path/to/main.py:app'). Got: '{target}'")
+
+    kwargs = args.__dict__
+
+    if kwargs.pop("stateless"):
+        if args.transport != "http":
+            parser.exit(1, "--stateless can only be used with the http transport.")
+        args.json_response = True
+        args.stateless_http = True
+
+    if kwargs.pop("no_cors"):
+        if args.transport != "http":
+            parser.exit(1, "--no-cors can only be used with the http transport.")
+    elif args.transport == "http":
+        from starlette.middleware import Middleware, cors
+
+        args.middleware = [Middleware(cors.CORSMiddleware, allow_origins="*", allow_methods="*", allow_headers="*", expose_headers="*")]
+
+    if args.transport != "stdio":
+        args.uvicorn_config = {"timeout_graceful_shutdown": 1e-100}  # align with upstream behavior but prevent error messages when no clients are connected
 
     from asyncio import run
     from contextlib import suppress
@@ -159,7 +187,7 @@ def cli(argv: list[str] = sys.argv[1:]):
             parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
     with suppress(KeyboardInterrupt):
-        run(run_with_hmr(**args.__dict__))
+        run(run_with_hmr(**kwargs))
 
 
 if __name__ == "__main__":

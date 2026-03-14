@@ -2,6 +2,9 @@ name: CI
 
 on: [push, fork, pull_request, workflow_dispatch]
 
+env:
+  FORCE_COLOR: 1
+
 jobs:
   typos:
     runs-on: ubuntu-latest
