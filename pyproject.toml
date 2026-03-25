@@ -9,7 +9,7 @@ dependencies = [
     "mkdocstrings-python~=2.0.1",
     "ruff~=0.15.4",
     "uvicorn-hmr",
-    "zensical==0.0.26",
+    "zensical==0.0.29",
 ]
 
 [tool.uv.workspace]
