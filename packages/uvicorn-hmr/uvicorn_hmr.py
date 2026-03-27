@@ -86,8 +86,8 @@ def main(
                 self.app = getattr(import_module(module), attr)
                 if refresh:
                     self.app = _try_patch(self.app)
-                watched_paths = [Path(p).resolve() for p in self.includes]
-                ignored_paths = [Path(p).resolve() for p in self.excludes]
+                watched_paths = [Path(p).resolve() for p in self.includes]  # noqa: ASYNC240
+                ignored_paths = [Path(p).resolve() for p in self.excludes]  # noqa: ASYNC240
                 if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                     logger.error("No files to watch for changes. The server will never reload.")
             return self.app
