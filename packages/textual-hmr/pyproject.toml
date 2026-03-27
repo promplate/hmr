@@ -1,0 +1,30 @@
+[project]
+name = "textual-hmr"
+description = "Hot Module Reloading for Textual apps"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["textual", "tui", "hot-reload", "hmr", "reload"]
+authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "hmr~=0.7.0",
+    "textual>=8,<9",
+]
+
+[project.scripts]
+textual-hmr = "textual_hmr:cli"
+
+[project.urls]
+Homepage = "https://github.com/promplate/hmr"
+Documentation = "https://hmr.promplate.dev"
+Repository = "https://github.com/promplate/hmr/tree/HEAD/packages/textual-hmr"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"

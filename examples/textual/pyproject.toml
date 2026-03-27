@@ -1,0 +1,14 @@
+[project]
+name = "textual-example"
+version = "0"
+requires-python = ">=3.12"
+dependencies = [
+    "textual>=8,<9",
+    "textual-hmr",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+textual-hmr = { workspace = true }

@@ -1,0 +1,243 @@
+import sys
+from argparse import SUPPRESS, ArgumentParser
+from collections.abc import Callable
+from dataclasses import dataclass
+from importlib import import_module
+from importlib.machinery import ModuleSpec
+from importlib.util import find_spec, module_from_spec
+from pathlib import Path
+
+__version__ = "0.1.0"
+
+__all__ = ["cli", "run_with_hmr"]
+
+LOADER_MODULE_NAME = "textual_hmr_app"
+
+
+@dataclass(frozen=True, slots=True)
+class _Target:
+    module_or_path: str
+    attr: str
+    entry_file: Path
+    is_path: bool
+
+    @classmethod
+    def parse(cls, target: str):
+        if ":" not in target[1:-1]:
+            raise ValueError(f"The target must be in the format 'module:attr' (e.g. 'main:DemoApp') or 'path:attr' (e.g. './main.py:DemoApp'). Got: '{target}'")
+        module_or_path, attr = target.rsplit(":", 1)
+        file = Path(module_or_path)
+        if file.is_file():
+            return cls(module_or_path, attr, file.resolve(), is_path=True)
+        if "." in module_or_path:
+            from reactivity.hmr.core import patch_meta_path
+
+            patch_meta_path()
+
+        if (spec := find_spec(module_or_path)) is None or spec.origin is None:
+            raise ModuleNotFoundError(module_or_path)
+        
+        return cls(module_or_path, attr, Path(spec.origin).resolve(), is_path=False)
+
+    def prepare_import_paths(self):
+        cwd = str(Path.cwd())
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
+        if self.is_path:
+            parent = str(self.entry_file.parent)
+            if parent not in sys.path:
+                sys.path.insert(0, parent)
+
+    def load(self):
+        if self.is_path:
+            if (module := sys.modules.get(LOADER_MODULE_NAME)) is None:
+                # Reuse a stable module name so HMR can update the same module object across reloads.
+                from reactivity.hmr.core import _loader
+
+                sys.modules[LOADER_MODULE_NAME] = module = module_from_spec(ModuleSpec(LOADER_MODULE_NAME, _loader, origin=self.module_or_path))
+            return getattr(module, self.attr)
+        return getattr(import_module(self.module_or_path), self.attr)
+
+
+def _coerce_app(target: object, *, watch_css: bool):
+    from textual.app import App
+
+    if isinstance(target, App):
+        return target
+    if isinstance(target, type) and issubclass(target, App):
+        return target(watch_css=watch_css)
+    if isinstance(target, Callable):
+        app = target()
+        if isinstance(app, App):
+            return app
+    raise TypeError("The target must be a Textual App subclass, an App instance, or a zero-argument callable returning an App.")
+
+
+def _display_path(path: str | Path):
+    path = Path(path).resolve()
+    try:
+        return f"'{path.relative_to(Path.cwd())}'"
+    except ValueError:
+        return f"'{path}'"
+
+
+def _status(*parts: object):
+    print("[textual-hmr]", *parts, file=sys.__stderr__)
+
+
+async def run_with_hmr(
+    target: str,
+    *,
+    watch: list[str] | None = None,
+    ignore: list[str] | None = None,
+    headless: bool = False,
+    inline: bool = False,
+    inline_no_clear: bool = False,
+    mouse: bool = True,
+    clear: bool = False,
+    watch_css: bool = True,
+):
+    from asyncio import Event, create_task
+
+    from reactivity.hmr.core import AsyncReloader, ReactiveModule, is_relative_to_any
+    from reactivity.hmr.fs import fs_signals
+    from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
+
+    cwd = str(Path.cwd())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+    resolved_target = _Target.parse(target)
+    watch = [str(resolved_target.entry_file.parent), *(watch or [])]
+    ignore = ignore or []
+    resolved_target.prepare_import_paths()
+
+    need_restart = True
+    current_app = None
+    main_loop_started = Event()
+    reloading = Event()
+
+    class Reloader(AsyncReloader):
+        def __init__(self):
+            super().__init__(str(resolved_target.entry_file), [str(resolved_target.entry_file), *watch], ignore)
+            self.error_filter.exclude_filenames.add(__file__)
+
+        async def __load(self):
+            app = _coerce_app(resolved_target.load(), watch_css=watch_css)
+            watched_paths = [Path(path).resolve() for path in self.includes]  # noqa: ASYNC240
+            ignored_paths = [Path(path).resolve() for path in self.excludes]  # noqa: ASYNC240
+            if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
+                _status("No files are currently watchable for hot reload. The app may not restart on edits.")
+            return app
+
+        async def load_app(self):
+            return await self.__load()
+
+        async def __aenter__(self):
+            call_pre_reload_hooks()
+            call_post_reload_hooks()
+            self._watch_task = create_task(self.start_watching())
+            return self
+
+        async def __aexit__(self, *_):
+            self.stop_watching()
+            await self._watch_task
+
+        async def start_watching(self):
+            await main_loop_started.wait()
+            return await super().start_watching()
+
+        def on_changes(self, files: set[Path]):
+            if not (files.intersection(ReactiveModule.instances) or files.intersection(path for path, signal in fs_signals.items() if signal.subscribers)):
+                return None
+            changed = super().on_changes(files | {resolved_target.entry_file})
+            if reloading.is_set():
+                return changed
+            nonlocal need_restart
+            if clear:
+                print("\033c", end="", flush=True)
+            need_restart = True
+            reloading.set()
+            _status("Detected changes in", ", ".join(_display_path(path) for path in files), "Restarting Textual app...")
+            if current_app is not None and current_app.is_running:
+                _status("Stopping current app...")
+                current_app.exit()
+            return changed
+
+    last_return = None
+    last_return_code = 0
+
+    reloader = Reloader()
+    await reloader.__aenter__()
+    try:
+        while need_restart:
+            need_restart = False
+            with reloader.error_filter:
+                reloading.set()
+                main_loop_started.clear()
+                _status("Loading app...")
+                current_app = await reloader.load_app()
+                _status("Loaded app:", type(current_app).__name__, f"(exit={getattr(current_app, '_exit', None)!r})")
+                # Textual doesn't expose a public "run loop entered" hook, so we patch `_ready`
+                # on the instance to align watcher start timing with the app lifecycle.
+                original_ready = current_app._ready  # noqa: SLF001
+
+                def mark_running():
+                    main_loop_started.set()
+                    reloading.clear()
+
+                async def patched_ready(original_ready=original_ready, app=current_app):
+                    await original_ready()
+                    app.call_after_refresh(mark_running)
+
+                setattr(current_app, "_ready", patched_ready)  # noqa: B010
+                try:
+                    _status("Starting app...")
+                    last_return = await current_app.run_async(headless=headless, inline=inline, inline_no_clear=inline_no_clear, mouse=mouse)
+                    last_return_code = current_app.return_code or 0
+                    _status("App returned:", repr(last_return), f"(return_code={last_return_code})")
+                finally:
+                    main_loop_started.clear()
+                    _status("Current app stopped.")
+                    current_app = None
+    finally:
+        await reloader.__aexit__(None, None, None)
+
+    return last_return, last_return_code
+
+
+def cli(argv: list[str] = sys.argv[1:]):
+    parser = ArgumentParser("textual-hmr", description="Hot Reloading for Textual apps")
+    if sys.version_info >= (3, 14):
+        parser.suggest_on_error = True
+    parser.add_argument("target", help="The import path of the Textual app. Supports module:attr and path:attr.")
+    parser.add_argument("--watch", action="append", default=[], help="Additional file or directory paths to watch.")
+    parser.add_argument("--ignore", action="append", default=[], help="File or directory paths to ignore.")
+    parser.add_argument("--headless", action="store_true", help="Run without terminal output.")
+    parser.add_argument("--inline", action="store_true", help="Run the app inline under the prompt.")
+    parser.add_argument("--inline-no-clear", action="store_true", help="Preserve inline output after exit.")
+    parser.add_argument("--no-mouse", action="store_true", help="Disable mouse support.")
+    parser.add_argument("--clear", action="store_true", help="Clear the terminal before restarting after changes.")
+    parser.add_argument("--no-watch-css", action="store_true", help="Do not enable Textual's CSS watcher for App subclasses.")
+    parser.add_argument("--version", action="version", version=f"textual-hmr {__version__}", help=SUPPRESS)
+    args = parser.parse_args(argv)
+
+    from asyncio import run
+
+    _, return_code = run(
+        run_with_hmr(
+            args.target,
+            watch=args.watch,
+            ignore=args.ignore,
+            headless=args.headless,
+            inline=args.inline,
+            inline_no_clear=args.inline_no_clear,
+            mouse=not args.no_mouse,
+            clear=args.clear,
+            watch_css=not args.no_watch_css,
+        )
+    )
+    raise SystemExit(return_code)
+
+
+if __name__ == "__main__":
+    cli()

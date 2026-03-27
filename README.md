@@ -51,6 +51,7 @@ HMR provides a rich ecosystem of tools for different Python development scenario
 | [`hmr`][repo]                                      | Reactive programming library and HMR core implementation            |
 | [`uvicorn-hmr`](./packages/uvicorn-hmr/)           | HMR-enabled Uvicorn server for ASGI apps (FastAPI, Starlette, etc.) |
 | [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                                   |
+| [`textual-hmr`](./packages/textual-hmr/)           | HMR-enabled Textual app runner for terminal UIs                     |
 | [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes modules on changes                 |
 | [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading        |
 
@@ -65,6 +66,7 @@ https://github.com/user-attachments/assets/fb247649-193d-4eed-b778-05b02d47c3f6
 - [`fastapi/`](./examples/fastapi/) - FastAPI server with hot reloading and browser refresh
 - [`flask/`](./examples/flask/) - Flask app with hot module reloading
 - [`mcp/`](./examples/mcp/) - MCP server with live code updates without connection drops
+- [`textual/`](./examples/textual/) - Textual TUI app with hot reloading
 
 ## Motivation
 
