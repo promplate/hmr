@@ -36,7 +36,7 @@ class _Target:
 
         if (spec := find_spec(module_or_path)) is None or spec.origin is None:
             raise ModuleNotFoundError(module_or_path)
-        
+
         return cls(module_or_path, attr, Path(spec.origin).resolve(), is_path=False)
 
     def prepare_import_paths(self):
