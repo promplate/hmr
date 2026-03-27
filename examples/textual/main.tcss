@@ -1,0 +1,10 @@
+Screen {
+    align: center middle;
+}
+
+#panel {
+    width: 56;
+    padding: 1 3;
+    border: round $accent;
+    background: $surface;
+}

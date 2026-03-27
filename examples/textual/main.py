@@ -5,10 +5,7 @@ from textual.widgets import Footer, Header, Static
 
 
 class DemoApp(App[None]):
-    CSS = """
-    Screen { align: center middle; }
-    #panel { width: 56; padding: 1 3; border: round $accent; background: $surface; }
-    """
+    CSS_PATH = "main.tcss"
 
     def compose(self):
         yield Header()
