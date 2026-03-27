@@ -1,7 +1,6 @@
 [project]
 name = "textual-hmr"
 description = "Hot Module Reloading for Textual apps"
-version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["textual", "tui", "hot-reload", "hmr", "reload"]
@@ -16,6 +15,11 @@ dependencies = [
     "hmr~=0.7.0",
     "textual>=8,<9",
 ]
+dynamic = ["version"]
+
+[tool.pdm.version]
+source = "file"
+path = "textual_hmr.py"
 
 [project.scripts]
 textual-hmr = "textual_hmr:cli"

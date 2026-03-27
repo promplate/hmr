@@ -45,6 +45,7 @@ jobs:
       matrix:
         dir:
           - uvicorn-hmr
+          - textual-hmr
           - fastapi-reloader
           - hmr-daemon
           - mcp-hmr

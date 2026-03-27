@@ -7,7 +7,7 @@ from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.0.1"
 
 __all__ = ["cli", "run_with_hmr"]
 
