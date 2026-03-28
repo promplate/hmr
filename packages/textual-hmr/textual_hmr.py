@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from textual.app import App
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __all__ = ["cli", "run_with_hmr"]
 
@@ -205,6 +205,10 @@ def cli(argv: list[str] = sys.argv[1:]):
     parser.add_argument("--clear", action="store_true", help="Clear the terminal before restarting after changes.")
     parser.add_argument("--no-watch-css", action="store_true", help="Do not enable Textual's CSS watcher for App subclasses.")
     parser.add_argument("--version", action="version", version=f"textual-hmr {__version__}", help=SUPPRESS)
+
+    if not argv:
+        parser.exit(1, parser.format_help())
+
     args = parser.parse_args(argv)
 
     from asyncio import run
@@ -222,7 +226,7 @@ def cli(argv: list[str] = sys.argv[1:]):
             watch_css=not args.no_watch_css,
         )
     )
-    raise SystemExit(return_code)
+    parser.exit(return_code)
 
 
 if __name__ == "__main__":
