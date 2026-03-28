@@ -1,7 +1,6 @@
 import sys
 from argparse import SUPPRESS, ArgumentParser
 from collections.abc import Callable
-from dataclasses import dataclass
 from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
@@ -18,49 +17,22 @@ __all__ = ["cli", "run_with_hmr"]
 LOADER_MODULE_NAME = "textual_hmr_app"
 
 
-@dataclass(frozen=True, slots=True)
-class _Target:
-    module_or_path: str
-    attr: str
-    entry_file: Path
-    is_path: bool
+def _parse_target(target: str):
+    if ":" not in target[1:-1]:
+        raise ValueError(f"The target must be in the format 'module:attr' (e.g. 'main:DemoApp') or 'path:attr' (e.g. './main.py:DemoApp'). Got: '{target}'")
+    module_or_path, attr = target.rsplit(":", 1)
+    file = Path(module_or_path)
+    if file.is_file():
+        return module_or_path, attr, file.resolve(), True
+    if "." in module_or_path:
+        from reactivity.hmr.core import patch_meta_path
 
-    @classmethod
-    def parse(cls, target: str):
-        if ":" not in target[1:-1]:
-            raise ValueError(f"The target must be in the format 'module:attr' (e.g. 'main:DemoApp') or 'path:attr' (e.g. './main.py:DemoApp'). Got: '{target}'")
-        module_or_path, attr = target.rsplit(":", 1)
-        file = Path(module_or_path)
-        if file.is_file():
-            return cls(module_or_path, attr, file.resolve(), is_path=True)
-        if "." in module_or_path:
-            from reactivity.hmr.core import patch_meta_path
+        patch_meta_path()
 
-            patch_meta_path()
+    if (spec := find_spec(module_or_path)) is None or spec.origin is None:
+        raise ModuleNotFoundError(module_or_path)
 
-        if (spec := find_spec(module_or_path)) is None or spec.origin is None:
-            raise ModuleNotFoundError(module_or_path)
-
-        return cls(module_or_path, attr, Path(spec.origin).resolve(), is_path=False)
-
-    def prepare_import_paths(self):
-        cwd = str(Path.cwd())
-        if cwd not in sys.path:
-            sys.path.insert(0, cwd)
-        if self.is_path:
-            parent = str(self.entry_file.parent)
-            if parent not in sys.path:
-                sys.path.insert(0, parent)
-
-    def load(self):
-        if self.is_path:
-            if (module := sys.modules.get(LOADER_MODULE_NAME)) is None:
-                # Reuse a stable module name so HMR can update the same module object across reloads.
-                from reactivity.hmr.core import _loader
-
-                sys.modules[LOADER_MODULE_NAME] = module = module_from_spec(ModuleSpec(LOADER_MODULE_NAME, _loader, origin=self.module_or_path))
-            return getattr(module, self.attr)
-        return getattr(import_module(self.module_or_path), self.attr)
+    return module_or_path, attr, Path(spec.origin).resolve(), False
 
 
 def _coerce_app(target: object, *, watch_css: bool):
@@ -99,10 +71,11 @@ async def run_with_hmr(
     cwd = str(Path.cwd())
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
-    resolved_target = _Target.parse(target)
-    watch = [str(resolved_target.entry_file.parent), *(watch or [])]
+    module_or_path, attr, entry_file, is_path = _parse_target(target)
+    watch = [str(entry_file.parent), *(watch or [])]
     ignore = ignore or []
-    resolved_target.prepare_import_paths()
+    if is_path and (parent := str(entry_file.parent)) not in sys.path:
+        sys.path.insert(0, parent)
 
     need_restart = True
     current_app: App | None = None
@@ -111,13 +84,22 @@ async def run_with_hmr(
 
     class Reloader(AsyncReloader):
         def __init__(self):
-            super().__init__(str(resolved_target.entry_file), [str(resolved_target.entry_file), *watch], ignore)
+            super().__init__(str(entry_file), [str(entry_file), *watch], ignore)
             self.error_filter.exclude_filenames.add(__file__)
             # Keep app construction and early startup inside the reactive load so file access during startup is tracked too.
             self._load = async_derived(self.__load, context=HMR_CONTEXT)
 
         async def __load(self):
-            app = _coerce_app(resolved_target.load(), watch_css=watch_css)
+            if is_path:
+                if (module := sys.modules.get(LOADER_MODULE_NAME)) is None:
+                    # Reuse a stable module name so HMR can update the same module object across reloads.
+                    from reactivity.hmr.core import _loader
+
+                    sys.modules[LOADER_MODULE_NAME] = module = module_from_spec(ModuleSpec(LOADER_MODULE_NAME, _loader, origin=module_or_path))
+                target = getattr(module, attr)
+            else:
+                target = getattr(import_module(module_or_path), attr)
+            app = _coerce_app(target, watch_css=watch_css)
             started = Event()
 
             def mark_running():
@@ -169,7 +151,7 @@ async def run_with_hmr(
                     return None
             if not (files.intersection(ReactiveModule.instances) or files.intersection(path for path, signal in fs_signals.items() if signal.subscribers)):
                 return None
-            changed = super().on_changes(files | {resolved_target.entry_file})
+            changed = super().on_changes(files | {entry_file})
             if reloading.is_set():
                 return changed
             nonlocal need_restart
