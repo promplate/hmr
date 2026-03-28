@@ -99,7 +99,7 @@ async def run_with_hmr(
 ):
     from asyncio import Event, create_task
 
-    from reactivity.hmr.core import AsyncReloader, ReactiveModule, is_relative_to_any
+    from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, ReactiveModule, is_relative_to_any
     from reactivity.hmr.fs import fs_signals
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
@@ -120,6 +120,8 @@ async def run_with_hmr(
         def __init__(self):
             super().__init__(str(resolved_target.entry_file), [str(resolved_target.entry_file), *watch], ignore)
             self.error_filter.exclude_filenames.add(__file__)
+            # Keep app construction and early startup inside the reactive load so file access during startup is tracked too.
+            self._load = HMR_CONTEXT.async_derived(self.__load)
 
         async def __load(self):
             app = _coerce_app(resolved_target.load(), watch_css=watch_css)
@@ -127,10 +129,34 @@ async def run_with_hmr(
             ignored_paths = [Path(path).resolve() for path in self.excludes]  # noqa: ASYNC240
             if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                 _status("No files are currently watchable for hot reload. The app may not restart on edits.")
-            return app
+            started = Event()
+
+            def mark_running():
+                main_loop_started.set()
+                reloading.clear()
+                started.set()
+
+            async def mark_app_ready(_pilot):
+                # Textual calls the auto-pilot callback after `_ready()`, which is the public hook closest to "app is running".
+                mark_running()
+
+            async def run_app():
+                try:
+                    return await app.run_async(headless=headless, inline=inline, inline_no_clear=inline_no_clear, mouse=mouse, auto_pilot=mark_app_ready)
+                finally:
+                    started.set()
+
+            task = create_task(run_app())
+            await started.wait()
+            return app, task
 
         async def load_app(self):
-            return await self.__load()
+            while True:
+                app, task = await self._load()
+                if not self._load.dirty:
+                    return app, task
+                app.exit()
+                await task
 
         async def __aenter__(self):
             call_pre_reload_hooks()
@@ -147,6 +173,11 @@ async def run_with_hmr(
             return await super().start_watching()
 
         def on_changes(self, files: set[Path]):
+            if watch_css:
+                # Let Textual's own CSS watcher handle stylesheet edits without restarting the whole app.
+                files = {path for path in files if path.suffix.lower() not in {".css", ".tcss"}}
+                if not files:
+                    return None
             if not (files.intersection(ReactiveModule.instances) or files.intersection(path for path, signal in fs_signals.items() if signal.subscribers)):
                 return None
             changed = super().on_changes(files | {resolved_target.entry_file})
@@ -175,24 +206,11 @@ async def run_with_hmr(
                 reloading.set()
                 main_loop_started.clear()
                 _status("Loading app...")
-                current_app = await reloader.load_app()
+                current_app, current_task = await reloader.load_app()
                 _status("Loaded app:", type(current_app).__name__, f"(exit={getattr(current_app, '_exit', None)!r})")
-                # Textual doesn't expose a public "run loop entered" hook, so we patch `_ready`
-                # on the instance to align watcher start timing with the app lifecycle.
-                original_ready = current_app._ready  # noqa: SLF001
-
-                def mark_running():
-                    main_loop_started.set()
-                    reloading.clear()
-
-                async def patched_ready(original_ready=original_ready, app=current_app):
-                    await original_ready()
-                    app.call_after_refresh(mark_running)
-
-                setattr(current_app, "_ready", patched_ready)  # noqa: B010
                 try:
                     _status("Starting app...")
-                    last_return = await current_app.run_async(headless=headless, inline=inline, inline_no_clear=inline_no_clear, mouse=mouse)
+                    last_return = await current_task
                     last_return_code = current_app.return_code or 0
                     _status("App returned:", repr(last_return), f"(return_code={last_return_code})")
                 finally:
