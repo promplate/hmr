@@ -113,8 +113,6 @@ async def run_with_hmr(
 
         async def __load(self):
             app = _coerce_app(resolved_target.load(), watch_css=watch_css)
-            watched_paths = [Path(path).resolve() for path in self.includes]  # noqa: ASYNC240
-            ignored_paths = [Path(path).resolve() for path in self.excludes]  # noqa: ASYNC240
             started = Event()
 
             def mark_running():
