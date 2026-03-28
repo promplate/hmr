@@ -181,9 +181,7 @@ async def run_with_hmr(
     last_return = None
     last_return_code = 0
 
-    reloader = Reloader()
-    await reloader.__aenter__()
-    try:
+    async with Reloader() as reloader:
         while need_restart:
             need_restart = False
             with reloader.error_filter:
@@ -196,8 +194,6 @@ async def run_with_hmr(
                 finally:
                     main_loop_started.clear()
                     current_app = None
-    finally:
-        await reloader.__aexit__(None, None, None)
 
     return last_return, last_return_code
 
