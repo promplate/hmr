@@ -6,6 +6,10 @@ from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from textual.app import App
 
 __version__ = "0.0.1"
 
@@ -87,7 +91,8 @@ async def run_with_hmr(
 ):
     from asyncio import Event, create_task
 
-    from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, ReactiveModule, is_relative_to_any
+    from reactivity import async_derived
+    from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, ReactiveModule
     from reactivity.hmr.fs import fs_signals
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
@@ -100,7 +105,7 @@ async def run_with_hmr(
     resolved_target.prepare_import_paths()
 
     need_restart = True
-    current_app = None
+    current_app: App | None = None
     main_loop_started = Event()
     reloading = Event()
 
@@ -109,7 +114,7 @@ async def run_with_hmr(
             super().__init__(str(resolved_target.entry_file), [str(resolved_target.entry_file), *watch], ignore)
             self.error_filter.exclude_filenames.add(__file__)
             # Keep app construction and early startup inside the reactive load so file access during startup is tracked too.
-            self._load = HMR_CONTEXT.async_derived(self.__load)
+            self._load = async_derived(self.__load, context=HMR_CONTEXT)
 
         async def __load(self):
             app = _coerce_app(resolved_target.load(), watch_css=watch_css)
@@ -188,6 +193,7 @@ async def run_with_hmr(
                 current_app, current_task = await reloader.load_app()
                 try:
                     last_return = await current_task
+                    assert current_app is not None
                     last_return_code = current_app.return_code or 0
                 finally:
                     main_loop_started.clear()
