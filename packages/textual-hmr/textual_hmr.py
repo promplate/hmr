@@ -73,18 +73,6 @@ def _coerce_app(target: object, *, watch_css: bool):
     raise TypeError("The target must be a Textual App subclass, an App instance, or a zero-argument callable returning an App.")
 
 
-def _display_path(path: str | Path):
-    path = Path(path).resolve()
-    try:
-        return f"'{path.relative_to(Path.cwd())}'"
-    except ValueError:
-        return f"'{path}'"
-
-
-def _status(*parts: object):
-    print("[textual-hmr]", *parts, file=sys.__stderr__)
-
-
 async def run_with_hmr(
     target: str,
     *,
@@ -127,8 +115,6 @@ async def run_with_hmr(
             app = _coerce_app(resolved_target.load(), watch_css=watch_css)
             watched_paths = [Path(path).resolve() for path in self.includes]  # noqa: ASYNC240
             ignored_paths = [Path(path).resolve() for path in self.excludes]  # noqa: ASYNC240
-            if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
-                _status("No files are currently watchable for hot reload. The app may not restart on edits.")
             started = Event()
 
             def mark_running():
@@ -188,9 +174,7 @@ async def run_with_hmr(
                 print("\033c", end="", flush=True)
             need_restart = True
             reloading.set()
-            _status("Detected changes in", ", ".join(_display_path(path) for path in files), "Restarting Textual app...")
             if current_app is not None and current_app.is_running:
-                _status("Stopping current app...")
                 current_app.exit()
             return changed
 
@@ -205,17 +189,12 @@ async def run_with_hmr(
             with reloader.error_filter:
                 reloading.set()
                 main_loop_started.clear()
-                _status("Loading app...")
                 current_app, current_task = await reloader.load_app()
-                _status("Loaded app:", type(current_app).__name__, f"(exit={getattr(current_app, '_exit', None)!r})")
                 try:
-                    _status("Starting app...")
                     last_return = await current_task
                     last_return_code = current_app.return_code or 0
-                    _status("App returned:", repr(last_return), f"(return_code={last_return_code})")
                 finally:
                     main_loop_started.clear()
-                    _status("Current app stopped.")
                     current_app = None
     finally:
         await reloader.__aexit__(None, None, None)
