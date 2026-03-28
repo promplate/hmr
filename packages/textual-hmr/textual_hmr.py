@@ -107,13 +107,17 @@ async def run_with_hmr(
                 reloading.clear()
                 started.set()
 
-            async def mark_app_ready(_pilot):
-                # Textual calls the auto-pilot callback after `_ready()`, which is the public hook closest to "app is running".
-                mark_running()
+            original_ready = app._ready  # noqa: SLF001
+
+            async def patched_ready(original_ready=original_ready, app=app):
+                await original_ready()
+                app.call_after_refresh(mark_running)
+
+            app._ready = patched_ready  # noqa: SLF001
 
             async def run_app():
                 try:
-                    return await app.run_async(headless=headless, inline=inline, inline_no_clear=inline_no_clear, mouse=mouse, auto_pilot=mark_app_ready)
+                    return await app.run_async(headless=headless, inline=inline, inline_no_clear=inline_no_clear, mouse=mouse)
                 finally:
                     started.set()
 
@@ -152,6 +156,9 @@ async def run_with_hmr(
             if not (files.intersection(ReactiveModule.instances) or files.intersection(path for path, signal in fs_signals.items() if signal.subscribers)):
                 return None
             changed = super().on_changes(files | {entry_file})
+            if not self._load.dirty:
+                # Keep startup-tracked app construction aligned with this reload.
+                self._load.trigger()
             if reloading.is_set():
                 return changed
             nonlocal need_restart
