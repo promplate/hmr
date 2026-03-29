@@ -12,12 +12,14 @@ __all__ = "mcp_server", "run_with_hmr"
 def mcp_server(target: str):
     module, attr = target.rsplit(":", 1)
 
-    from asyncio import Event, Lock, TaskGroup
+    from asyncio import Event, Lock, TaskGroup, gather
     from contextlib import asynccontextmanager, contextmanager, suppress
+    from weakref import WeakSet
 
     import mcp.server
     from fastmcp import FastMCP
     from fastmcp.server.proxy import ProxyClient
+    from mcp.server.session import ServerSession
     from reactivity import async_effect, derived
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, _loader
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
@@ -45,8 +47,26 @@ def mcp_server(target: str):
     async def using(app: FastMCP | mcp.server.FastMCP, stop_event: Event, finish_event: Event):
         async with lock:
             with mount(app):
+                await gather(*(tg.create_task(_notify_list_changed(session)) for session in [*active_sessions]))
                 await stop_event.wait()
                 finish_event.set()
+
+    active_sessions = WeakSet[ServerSession]()
+
+    async def _notify_list_changed(session: ServerSession):
+        try:
+            await session.send_tool_list_changed()
+            await session.send_resource_list_changed()
+            await session.send_prompt_list_changed()
+        except Exception as e:
+            with suppress(Exception):
+                await session.send_log_message("warning", e)
+
+    original_session_init = ServerSession.__init__
+
+    def _capture_session_init(self: ServerSession, *args, **kwargs):
+        original_session_init(self, *args, **kwargs)
+        active_sessions.add(self)
 
     if Path(module).is_file():  # module:attr
 
@@ -84,6 +104,7 @@ def mcp_server(target: str):
             self.error_filter.exclude_filenames.add(__file__)
 
         async def __aenter__(self):
+            ServerSession.__init__ = _capture_session_init
             call_pre_reload_hooks()
             try:
                 await main()
@@ -92,6 +113,7 @@ def mcp_server(target: str):
                 tg.create_task(self.start_watching())
 
         async def __aexit__(self, *_):
+            ServerSession.__init__ = original_session_init
             self.stop_watching()
             main.dispose()
             if stop_event:
