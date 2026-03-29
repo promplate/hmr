@@ -98,14 +98,14 @@ This is useful when you want to extend your server with additional features like
 If your new app has added or removed tools, clients may need a `list_changed` notification after each remount. The Python MCP SDK does not currently expose a clean hook for this, so you can use `patch_session_init()`:
 
 ```python
-from mcp_hmr.mcp_hmr import patch_session_init
+from mcp_hmr import mcp_server, patch_session_init
 
-unpatch_session_init = patch_session_init()
+unpatch = patch_session_init()
 try:
     async with mcp_server("path/to/mcp-server.py:mcp") as mcp:
         await mcp.run_async()
 finally:
-    unpatch_session_init()
+    unpatch()
 ```
 
 `patch_session_init()` installs the patch and returns a function that removes it. The `mcp-hmr` CLI already does this for you. If this patch conflicts with your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and tell us about the scenario.
