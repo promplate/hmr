@@ -7,7 +7,7 @@ from weakref import WeakSet
 
 __version__ = "0.0.3.3"
 
-__all__ = "mcp_server", "run_with_hmr"
+__all__ = "mcp_server", "patch_session_init", "run_with_hmr"
 
 
 active_sessions = WeakSet()
