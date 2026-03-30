@@ -7,7 +7,7 @@ from weakref import WeakSet
 
 __version__ = "0.0.3.4"
 
-__all__ = "mcp_server", "patch_session_init", "run_with_hmr"
+__all__ = "mcp_server", "run_with_hmr"
 
 
 active_sessions = WeakSet()
@@ -45,6 +45,17 @@ def mcp_server(target: str):
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
     base_app = FastMCP(name="proxy", include_fastmcp_meta=False)
+
+    original_run = base_app._mcp_server.run  # noqa: SLF001
+
+    async def run_with_patched_session(*args, **kwargs):
+        unpatch = patch_session_init()
+        try:
+            await original_run(*args, **kwargs)
+        finally:
+            unpatch()
+
+    base_app._mcp_server.run = run_with_patched_session  # noqa: SLF001
 
     @contextmanager
     def mount(app: FastMCP | mcp.server.FastMCP):
@@ -218,14 +229,10 @@ def cli(argv: list[str] = sys.argv[1:]):
         if find_spec(module_or_path) is None:
             parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
-    unpatch_session_init = patch_session_init()
-
-    try:
+    try:  # noqa: SIM105
         run(run_with_hmr(**kwargs))
     except KeyboardInterrupt:
         pass
-    finally:
-        unpatch_session_init()
 
 
 if __name__ == "__main__":

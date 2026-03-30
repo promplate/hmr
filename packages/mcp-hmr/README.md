@@ -95,20 +95,15 @@ This is useful when you want to extend your server with additional features like
 
 ### List Changed Notifications
 
-If your new app has added or removed tools, clients may need a `list_changed` notification after each remount. The Python MCP SDK does not currently expose a clean hook for this, so you can use `patch_session_init()`:
+After each HMR remount, `mcp-hmr` automatically sends `list_changed` notifications for tools, resources, and prompts to connected clients.
 
-```python
-from mcp_hmr import mcp_server, patch_session_init
+This matters because many MCP clients cache the initial lists they receive. Without these notifications, newly added or removed tools/resources/prompts may stay invisible until you fully restart the server.
 
-unpatch = patch_session_init()
-try:
-    async with mcp_server("path/to/mcp-server.py:mcp") as mcp:
-        await mcp.run_async()
-finally:
-    unpatch()
-```
+No extra setup is required when you use the `mcp-hmr` CLI, `mcp_server()`, or `run_with_hmr()`.
 
-`patch_session_init()` installs the patch and returns a function that removes it. The `mcp-hmr` CLI already does this for you. If this patch conflicts with your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and tell us about the scenario.
+> [!NOTE]
+>
+> Internally, `mcp-hmr` currently patches `ServerSession.__init__` while the server is running because the Python MCP SDK does not expose a cleaner hook for tracking active sessions yet. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
 
 > [!NOTE]
 >
