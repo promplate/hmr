@@ -5,7 +5,7 @@ from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 from weakref import WeakSet
 
-__version__ = "0.0.3.4"
+__version__ = "0.0.3.5"
 
 __all__ = "mcp_server", "run_with_hmr"
 
@@ -13,7 +13,13 @@ __all__ = "mcp_server", "run_with_hmr"
 active_sessions = WeakSet()
 
 
+_pending_patches = 0
+
+
 def patch_session_init():
+    global _pending_patches
+    _pending_patches += 1
+
     from mcp.server.session import ServerSession
 
     original_session_init = ServerSession.__init__
@@ -21,11 +27,15 @@ def patch_session_init():
     def _capture_session_init(self: ServerSession, *args, **kwargs):
         original_session_init(self, *args, **kwargs)
         active_sessions.add(self)
+        global _pending_patches
+        _pending_patches -= 1
+        unpatch()
 
     ServerSession.__init__ = _capture_session_init
 
     def unpatch():
-        ServerSession.__init__ = original_session_init
+        if _pending_patches < 1:
+            ServerSession.__init__ = original_session_init
 
     return unpatch
 

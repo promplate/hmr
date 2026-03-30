@@ -103,7 +103,7 @@ No extra setup is required when you use the `mcp-hmr` CLI, `mcp_server()`, or `r
 
 > [!NOTE]
 >
-> Internally, `mcp-hmr` currently patches `ServerSession.__init__` while the server is running because the Python MCP SDK does not expose a cleaner hook for tracking active sessions yet. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
+> Internally, `mcp-hmr` temporarily patches `ServerSession.__init__` during FastMCP session initialization and restores it as soon as the managed session is captured. The Python MCP SDK does not expose a cleaner hook for tracking active sessions yet. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
 
 > [!NOTE]
 >
