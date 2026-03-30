@@ -5,7 +5,7 @@ from importlib.util import find_spec, module_from_spec
 from pathlib import Path
 from weakref import WeakSet
 
-__version__ = "0.0.3.3"
+__version__ = "0.0.3.4"
 
 __all__ = "mcp_server", "patch_session_init", "run_with_hmr"
 
