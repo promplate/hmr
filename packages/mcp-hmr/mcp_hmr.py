@@ -33,7 +33,7 @@ def patch_session_init():
 def mcp_server(target: str):
     module, attr = target.rsplit(":", 1)
 
-    from asyncio import Event, Lock, TaskGroup, gather
+    from asyncio import Event, Lock, TaskGroup
     from contextlib import asynccontextmanager, contextmanager, suppress
 
     import mcp.server
@@ -67,7 +67,8 @@ def mcp_server(target: str):
     async def using(app: FastMCP | mcp.server.FastMCP, stop_event: Event, finish_event: Event):
         async with lock:
             with mount(app):
-                await gather(*(tg.create_task(_notify_list_changed(session)) for session in [*active_sessions]))
+                for session in active_sessions:
+                    tg.create_task(_notify_list_changed(session))
                 await stop_event.wait()
                 finish_event.set()
 
