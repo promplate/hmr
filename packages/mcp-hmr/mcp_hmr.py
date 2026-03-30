@@ -3,10 +3,31 @@ from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
+from weakref import WeakSet
 
 __version__ = "0.0.3.3"
 
-__all__ = "mcp_server", "run_with_hmr"
+__all__ = "mcp_server", "patch_session_init", "run_with_hmr"
+
+
+active_sessions = WeakSet()
+
+
+def patch_session_init():
+    from mcp.server.session import ServerSession
+
+    original_session_init = ServerSession.__init__
+
+    def _capture_session_init(self: ServerSession, *args, **kwargs):
+        original_session_init(self, *args, **kwargs)
+        active_sessions.add(self)
+
+    ServerSession.__init__ = _capture_session_init
+
+    def unpatch():
+        ServerSession.__init__ = original_session_init
+
+    return unpatch
 
 
 def mcp_server(target: str):
@@ -18,6 +39,7 @@ def mcp_server(target: str):
     import mcp.server
     from fastmcp import FastMCP
     from fastmcp.server.proxy import ProxyClient
+    from mcp.server.session import ServerSession
     from reactivity import async_effect, derived
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, _loader
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
@@ -45,8 +67,19 @@ def mcp_server(target: str):
     async def using(app: FastMCP | mcp.server.FastMCP, stop_event: Event, finish_event: Event):
         async with lock:
             with mount(app):
+                for session in active_sessions:
+                    tg.create_task(_notify_list_changed(session))
                 await stop_event.wait()
                 finish_event.set()
+
+    async def _notify_list_changed(session: ServerSession):
+        try:
+            await session.send_tool_list_changed()
+            await session.send_resource_list_changed()
+            await session.send_prompt_list_changed()
+        except Exception as e:
+            with suppress(Exception):
+                await session.send_log_message("warning", e)
 
     if Path(module).is_file():  # module:attr
 
@@ -170,7 +203,6 @@ def cli(argv: list[str] = sys.argv[1:]):
         args.uvicorn_config = {"timeout_graceful_shutdown": 1e-100}  # align with upstream behavior but prevent error messages when no clients are connected
 
     from asyncio import run
-    from contextlib import suppress
 
     if (cwd := str(Path.cwd())) not in sys.path:
         sys.path.append(cwd)
@@ -186,8 +218,14 @@ def cli(argv: list[str] = sys.argv[1:]):
         if find_spec(module_or_path) is None:
             parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
-    with suppress(KeyboardInterrupt):
+    unpatch_session_init = patch_session_init()
+
+    try:
         run(run_with_hmr(**kwargs))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        unpatch_session_init()
 
 
 if __name__ == "__main__":
