@@ -4,6 +4,7 @@ version = "0"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp~=2.14.1",
+    "mcp<2",  # fastmcp 2.x needs an mcp 1.x SDK but declares `mcp>=1.24.0` with no upper bound
     "mcp-hmr",
 ]
 
