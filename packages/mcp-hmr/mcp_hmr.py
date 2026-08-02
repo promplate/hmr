@@ -3,6 +3,7 @@ from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
+from typing import Any
 from weakref import WeakSet
 
 __version__ = "0.0.4"
@@ -50,8 +51,8 @@ def proxy_backend():
     from mcp.server.session import ServerSession
 
     try:  # fastmcp 3 moved the proxy module and split `create_proxy` out of `FastMCP.as_proxy`
-        from fastmcp.server import create_proxy
-        from fastmcp.server.providers.proxy import ProxyClient
+        from fastmcp.server import create_proxy  # type: ignore
+        from fastmcp.server.providers.proxy import ProxyClient  # type: ignore
 
         fastmcp3 = True
     except ImportError:
@@ -60,7 +61,7 @@ def proxy_backend():
         fastmcp3 = False
 
     # fastmcp 3 dropped this kwarg together with the metadata it used to suppress
-    no_meta = {} if fastmcp3 else {"include_fastmcp_meta": False}
+    no_meta: dict[str, Any] = {} if fastmcp3 else {"include_fastmcp_meta": False}
 
     base_app = FastMCP(name="proxy", **no_meta)
 
@@ -79,12 +80,12 @@ def proxy_backend():
 
         @contextmanager
         def mount(app):
-            base_app.mount(create_proxy(ProxyClient(app)))
-            provider = base_app.providers[-1]
+            base_app.mount(create_proxy(ProxyClient(app)))  # type: ignore
+            provider = base_app.providers[-1]  # type: ignore
             try:
                 yield
             finally:  # unmount
-                base_app.providers.remove(provider)
+                base_app.providers.remove(provider)  # type: ignore
 
     else:
 
@@ -272,20 +273,20 @@ async def run_with_hmr(target: str, log_level: str | None = None, transport="std
                 case "stdio":
                     return await mcp.run_stdio_async()
                 case "sse":
-                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
+                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))  # type: ignore
                 case _:
-                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
+                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))  # type: ignore
         match transport:
             case "stdio":
-                await mcp.run_stdio_async(show_banner=False, log_level=log_level)
+                await mcp.run_stdio_async(show_banner=False, log_level=log_level)  # type: ignore
             case "http" | "streamable-http":
-                await mcp.run_http_async(log_level=log_level, **kwargs)
+                await mcp.run_http_async(log_level=log_level, **kwargs)  # type: ignore
             case "sse":
                 # for older FastMCP versions
                 if hasattr(mcp, "run_sse_async"):
                     await mcp.run_sse_async(log_level=log_level, **kwargs)  # type: ignore
                 else:
-                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)
+                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)  # type: ignore
             case _:
                 await mcp.run_async(transport, log_level=log_level, **kwargs)  # type: ignore
 
