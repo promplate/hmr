@@ -18,7 +18,7 @@ dynamic = ["version"]
 
 # `fastmcp` pins `mcp<2`, so depending on it unconditionally would rule out mcp 2.x forever
 [project.optional-dependencies]
-fastmcp = ["fastmcp>=2.2.0,<4"]
+fastmcp = ["fastmcp>=2.12,<4"]
 mcp = ["mcp>=2"]
 
 [tool.pdm.version]

@@ -45,7 +45,6 @@ def proxy_backend():
 
     from asyncio import TaskGroup
     from contextlib import contextmanager, suppress
-    from inspect import signature
 
     from fastmcp import FastMCP
     from mcp.server.session import ServerSession
@@ -60,8 +59,8 @@ def proxy_backend():
 
         fastmcp3 = False
 
-    # this kwarg only exists between fastmcp 2.11 and 3.0 — fastmcp 3 dropped it together with the metadata it used to suppress
-    no_meta = {"include_fastmcp_meta": False} if "include_fastmcp_meta" in signature(FastMCP.__init__).parameters else {}
+    # fastmcp 3 dropped this kwarg together with the metadata it used to suppress
+    no_meta = {} if fastmcp3 else {"include_fastmcp_meta": False}
 
     base_app = FastMCP(name="proxy", **no_meta)
 
