@@ -258,18 +258,23 @@ def mcp_server(target: str):
     return _()
 
 
-def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
-    """MCPServer's runners take a narrower option set than FastMCP's, and name the route path per transport.
+def _supported(runner, kwargs: dict):
+    """Runner signatures drift across SDK versions (`log_level` only reached `run_stdio_async` in fastmcp 2.13, and `MCPServer`'s runners take a far narrower set).
 
     Filtering by signature also drops the `None` defaults argparse supplies, so the runner's own defaults win.
     """
     from inspect import signature
 
+    return {k: v for k, v in kwargs.items() if k in signature(runner).parameters and v is not None}
+
+
+def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
+    """MCPServer's runners name the route path per transport, and take no middleware."""
     if path := kwargs.get("path"):
         kwargs = kwargs | {path_key: path}
     if kwargs.get("middleware"):
         print("mcp-hmr: CORS is unavailable on mcp 2.x — MCPServer's runners take no middleware", file=sys.stderr)
-    return {k: v for k, v in kwargs.items() if k in signature(runner).parameters and v is not None}
+    return _supported(runner, kwargs)
 
 
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
@@ -282,19 +287,20 @@ async def run_with_hmr(target: str, log_level: str | None = None, transport="std
                     return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
                 case _:
                     return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
+        kwargs |= {"log_level": log_level}
         match transport:
             case "stdio":
-                await mcp.run_stdio_async(show_banner=False, log_level=log_level)
+                await mcp.run_stdio_async(**_supported(mcp.run_stdio_async, kwargs | {"show_banner": False}))
             case "http" | "streamable-http":
-                await mcp.run_http_async(log_level=log_level, **kwargs)
+                await mcp.run_http_async(**_supported(mcp.run_http_async, kwargs))
             case "sse":
                 # for older FastMCP versions
                 if hasattr(mcp, "run_sse_async"):
-                    await mcp.run_sse_async(log_level=log_level, **kwargs)
+                    await mcp.run_sse_async(**_supported(mcp.run_sse_async, kwargs))
                 else:
-                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)
+                    await mcp.run_http_async(transport="sse", **_supported(mcp.run_http_async, kwargs))
             case _:
-                await mcp.run_async(transport, log_level=log_level, **kwargs)
+                await mcp.run_async(transport, **_supported(mcp.run_async, kwargs))
 
 
 def cli(argv: list[str] = sys.argv[1:]):
