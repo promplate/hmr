@@ -5,7 +5,13 @@
 
 Provides [Hot Module Reloading](https://pyth-on-line.promplate.dev/hmr) for MCP/FastMCP servers.
 
-It acts as **a drop-in replacement for `mcp run path:app` or `fastmcp run path:app`.** Both [FastMCP v2](https://github.com/jlowin/fastmcp) and the [official python SDK](https://github.com/modelcontextprotocol/python-sdk) are supported. Compatible libraries like [mcp-use](https://github.com/mcp-use/mcp-use/tree/main/libraries/python) are also supported.
+It acts as **a drop-in replacement for `mcp run path:app` or `fastmcp run path:app`.** Both [FastMCP](https://github.com/jlowin/fastmcp) (v2 and v3) and the [official python SDK](https://github.com/modelcontextprotocol/python-sdk) (`mcp` 1.x and 2.x) are supported. Compatible libraries like [mcp-use](https://github.com/mcp-use/mcp-use/tree/main/libraries/python) are also supported.
+
+`mcp` 1.x and 2.x are the same distribution and cannot be installed side by side. Neither is a dependency of `mcp-hmr` — install it next to the server you already have, and it adapts to whichever generation is there:
+
+```sh
+pip install mcp-hmr
+```
 
 > [!TIP]
 >
@@ -103,7 +109,9 @@ No extra setup is required when you use the `mcp-hmr` CLI, `mcp_server()`, or `r
 
 > [!NOTE]
 >
-> Internally, `mcp-hmr` temporarily patches `ServerSession.__init__` during FastMCP session initialization and restores it as soon as the managed session is captured. The Python MCP SDK does not expose a cleaner hook for tracking active sessions yet. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
+> On `mcp` 1.x, `mcp-hmr` temporarily patches `ServerSession.__init__` during FastMCP session initialization and restores it as soon as the managed session is captured. That SDK exposes no cleaner hook for tracking active sessions. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
+>
+> `MCPServer` targets (`mcp` 2.x) take a different route, since that SDK has neither mount nor proxy: their registries are swapped into a stable outer server in Python rather than proxied over MCP. So only the tool/resource/prompt registries are swapped — extensions, custom routes and middleware added on reload won't take effect, and HTTP transport gets no CORS, as `MCPServer`'s runners take no middleware. There is also no patching: notifications are published on a subscription bus `mcp-hmr` owns, and on the 2026-07-28 wire they only reach clients that opened a `subscriptions/listen` stream.
 
 > [!NOTE]
 >
