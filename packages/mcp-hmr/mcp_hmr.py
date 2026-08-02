@@ -1,5 +1,4 @@
 import sys
-from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
@@ -166,13 +165,13 @@ def swap_backend():
 
 
 def pick_backend(app):
-    """`app` is `None` when the very first load failed — then the environment is all we have to go on."""
+    """`app` is the load error when the very first load failed — then the environment is all we have to go on."""
     try:
         from mcp.server import MCPServer  # type: ignore
     except ImportError:  # mcp 1.x
         return proxy_backend()
     # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
-    return swap_backend() if app is None or isinstance(app, MCPServer) else proxy_backend()
+    return swap_backend() if isinstance(app, MCPServer | Exception) else proxy_backend()
 
 
 def mcp_server(target: str):
@@ -208,7 +207,9 @@ def mcp_server(target: str):
     else:  # path:attr
 
         def load_app():
-            return getattr(import_module(module), attr)
+            if (mod := sys.modules.get(module)) is None:
+                sys.modules[module] = mod = module_from_spec(find_spec(module))  # type: ignore  # not `import_module`: a module whose body raises is purged from `sys.modules`, and the replacement built on retry would carry none of our subscriptions
+            return getattr(mod, attr)
 
     @derived(context=HMR_CONTEXT)
     def get_app():
@@ -235,7 +236,7 @@ def mcp_server(target: str):
 
         app = get_app()
         if base_app is ...:  # a failed first load still needs a server to hand to the transport, so the client can connect and pick up the fix
-            base_app, mount, notify = pick_backend(None if isinstance(app, Exception) else app)
+            base_app, mount, notify = pick_backend(app)
         if isinstance(app, Exception):
             raise app
 
