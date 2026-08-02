@@ -13,6 +13,8 @@ It acts as **a drop-in replacement for `mcp run path:app` or `fastmcp run path:a
 pip install mcp-hmr
 ```
 
+One exception: on `mcp` 1.x the target is fronted by a [FastMCP](https://github.com/jlowin/fastmcp) proxy, so `fastmcp` has to be importable. That's free if your server is a `fastmcp` one, but `mcp.server.fastmcp.FastMCP` and `mcp_use.MCPServer` targets need `pip install fastmcp` alongside.
+
 > [!TIP]
 >
 > Here's the thing: With this package, you don't need to restart your MCP server on every code change. Just save your files, and the server automatically uses the latest code without dropping client connections.
