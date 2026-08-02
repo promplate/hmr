@@ -45,11 +45,12 @@ def proxy_backend():
 
     from asyncio import TaskGroup
     from contextlib import contextmanager, suppress
+    from inspect import signature
 
     from fastmcp import FastMCP
     from mcp.server.session import ServerSession
 
-    try:  # fastmcp 3 moved the proxy module, split `create_proxy` out of `FastMCP.as_proxy`, and dropped the `include_fastmcp_meta` kwarg together with the metadata it suppressed
+    try:  # fastmcp 3 moved the proxy module and split `create_proxy` out of `FastMCP.as_proxy`
         from fastmcp.server import create_proxy
         from fastmcp.server.providers.proxy import ProxyClient
 
@@ -59,7 +60,10 @@ def proxy_backend():
 
         fastmcp3 = False
 
-    base_app = FastMCP(name="proxy") if fastmcp3 else FastMCP(name="proxy", include_fastmcp_meta=False)
+    # this kwarg only exists between fastmcp 2.11 and 3.0 — fastmcp 3 dropped it together with the metadata it used to suppress
+    no_meta = {"include_fastmcp_meta": False} if "include_fastmcp_meta" in signature(FastMCP.__init__).parameters else {}
+
+    base_app = FastMCP(name="proxy", **no_meta)
 
     original_run = base_app._mcp_server.run  # noqa: SLF001
 
@@ -72,7 +76,7 @@ def proxy_backend():
 
     base_app._mcp_server.run = run_with_patched_session  # noqa: SLF001
 
-    if fastmcp3:  # fastmcp 3 replaced the three `_mounted_servers` lists with one provider list
+    if fastmcp3:  # fastmcp 3 replaced `_mounted_servers` (and the per-manager copies older 2.x kept) with a single `providers` list
 
         @contextmanager
         def mount(app):
@@ -108,7 +112,7 @@ def proxy_backend():
             await session.send_prompt_list_changed()
         except Exception as e:
             with suppress(Exception):
-                await session.send_log_message("warning", e)
+                await session.send_log_message("warning", str(e))  # the raw exception would only fail to serialize later, in the transport's writer task
 
     async def notify():
         async with TaskGroup() as tg:  # one slow client must not delay the others
@@ -123,7 +127,7 @@ def swap_backend():
 
     Unlike the proxy backend this talks Python, not MCP, so the target must be an `MCPServer` too.
     Notifications go through the subscription bus, which only reaches clients that opened a
-    `subscriptions/listen` stream — the 2026-07-28 spec forbids pushing to the ones that didn't.
+    `subscriptions/listen` stream — on the 2026-07-28 wire there is no other channel to reach them.
     """
 
     from contextlib import contextmanager
@@ -131,21 +135,24 @@ def swap_backend():
     from mcp.server import MCPServer
     from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged
 
-    # every registry an MCPServer looks things up in — swapping these swaps the whole served surface
+    # every registry an MCPServer looks tools/resources/prompts up in — extensions, custom routes, middleware and lifespan stay the outer server's
     registries = ("_tool_manager", "_tools"), ("_resource_manager", "_resources"), ("_resource_manager", "_templates"), ("_prompt_manager", "_prompts")
 
     bus = InMemorySubscriptionBus()
     base_app = MCPServer("proxy", subscriptions=bus)
 
-    def install(app: MCPServer):
-        for manager, slot in registries:
-            setattr(getattr(base_app, manager), slot, getattr(getattr(app, manager), slot))
+    def read(app: MCPServer):  # the containers themselves, not copies — while mounted, the target's live registries *are* the served ones
+        return [getattr(getattr(app, manager), slot) for manager, slot in registries]
 
-    empty = MCPServer("empty")  # a pristine server, to restore the registries from on unmount
+    def install(values):
+        for (manager, slot), value in zip(registries, values, strict=True):
+            setattr(getattr(base_app, manager), slot, value)
+
+    empty = read(base_app)  # captured before anything is mounted
 
     @contextmanager
     def mount(app: MCPServer):
-        install(app)
+        install(read(app))
         try:
             yield
         finally:  # unmount
@@ -246,17 +253,22 @@ def mcp_server(target: str):
 
 
 def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
-    """MCPServer's runners accept a subset of FastMCP's options, and name the route path per transport."""
+    """MCPServer's runners take a narrower option set than FastMCP's, and name the route path per transport.
+
+    Filtering by signature also drops the `None` defaults argparse supplies, so the runner's own defaults win.
+    """
     from inspect import signature
 
     if path := kwargs.get("path"):
         kwargs = kwargs | {path_key: path}
+    if kwargs.get("middleware"):
+        print("mcp-hmr: CORS is unavailable on mcp 2.x — MCPServer's runners take no middleware", file=sys.stderr)
     return {k: v for k, v in kwargs.items() if k in signature(runner).parameters and v is not None}
 
 
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
     async with mcp_server(target) as mcp:
-        if not hasattr(mcp, "run_async"):  # an MCPServer, which has neither run_async nor any log_level option
+        if not hasattr(mcp, "run_async"):  # an MCPServer, which has no run_async, and whose runners take no log_level
             match transport:
                 case "stdio":
                     return await mcp.run_stdio_async()

@@ -112,7 +112,7 @@ No extra setup is required when you use the `mcp-hmr` CLI, `mcp_server()`, or `r
 >
 > On `mcp` 1.x, `mcp-hmr` temporarily patches `ServerSession.__init__` during FastMCP session initialization and restores it as soon as the managed session is captured. That SDK exposes no cleaner hook for tracking active sessions. If this causes conflicts in your setup, please open an [issue](https://github.com/promplate/hmr/issues/new?labels=mcp-hmr) and share the details.
 >
-> On `mcp` 2.x there is no patching: notifications are published on a subscription bus `mcp-hmr` owns. Per the 2026-07-28 spec, they only reach clients that opened a `subscriptions/listen` stream — clients that never subscribe get nothing. Targets must be `MCPServer` instances, since this backend swaps registries in Python rather than proxying over MCP.
+> On `mcp` 2.x there is no patching: notifications are published on a subscription bus `mcp-hmr` owns. On the 2026-07-28 wire they only reach clients that opened a `subscriptions/listen` stream — there is no other channel to reach the ones that didn't. Targets must be `MCPServer` instances, since this backend swaps registries in Python rather than proxying over MCP; only the tool/resource/prompt registries are swapped, so extensions, custom routes and middleware added on reload won't take effect. HTTP transport also gets no CORS there, as `MCPServer`'s runners take no middleware.
 
 > [!NOTE]
 >
