@@ -99,6 +99,8 @@ async with mcp_server("path/to/mcp-server.py:mcp") as mcp:
 
 This is useful when you want to extend your server with additional features like CORS middleware while maintaining HMR capabilities.
 
+Whichever backend gets picked, the target is reached over MCP or through its registries — never mounted as an ASGI app. So routes it declares with `@custom_route` are not served, and belong on the outer app instead.
+
 ### List Changed Notifications
 
 After each HMR remount, `mcp-hmr` automatically sends `list_changed` notifications for tools, resources, and prompts to connected clients.
