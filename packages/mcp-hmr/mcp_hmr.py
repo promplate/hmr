@@ -1,4 +1,5 @@
 import sys
+from importlib import import_module
 from importlib.machinery import ModuleSpec
 from importlib.util import find_spec, module_from_spec
 from pathlib import Path
@@ -208,7 +209,11 @@ def mcp_server(target: str):
 
         def load_app():
             if (mod := sys.modules.get(module)) is None:
-                sys.modules[module] = mod = module_from_spec(find_spec(module))  # type: ignore  # not `import_module`: a module whose body raises is purged from `sys.modules`, and the replacement built on retry would carry none of our subscriptions
+                spec = find_spec(module)
+                if spec.loader is not _loader:  # type: ignore  # installed or outside the watched roots: not reloadable anyway, and `module_from_spec` alone would never execute it
+                    return getattr(import_module(module), attr)
+                # not `import_module`: a module whose body raises is purged from `sys.modules`, and the replacement built on retry would carry none of our subscriptions
+                sys.modules[module] = mod = module_from_spec(spec)  # type: ignore
             return getattr(mod, attr)
 
     @derived(context=HMR_CONTEXT)
