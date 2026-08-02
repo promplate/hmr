@@ -43,21 +43,23 @@ def patch_session_init():
 def proxy_backend():
     """For mcp 1.x, where nothing can swap a live server's contents: front the target with a FastMCP proxy."""
 
+    from asyncio import TaskGroup
     from contextlib import contextmanager, suppress
-    from inspect import signature
 
     from fastmcp import FastMCP
     from mcp.server.session import ServerSession
 
-    try:
-        from fastmcp.server.providers.proxy import ProxyClient  # fastmcp 3.x
+    try:  # fastmcp 3 moved the proxy module, split `create_proxy` out of `FastMCP.as_proxy`, and dropped the `include_fastmcp_meta` kwarg together with the metadata it suppressed
+        from fastmcp.server import create_proxy
+        from fastmcp.server.providers.proxy import ProxyClient
+
+        fastmcp3 = True
     except ImportError:
         from fastmcp.server.proxy import ProxyClient
 
-    # fastmcp 3 dropped this kwarg together with the metadata it used to suppress
-    no_meta = {"include_fastmcp_meta": False} if "include_fastmcp_meta" in signature(FastMCP.__init__).parameters else {}
+        fastmcp3 = False
 
-    base_app = FastMCP(name="proxy", **no_meta)
+    base_app = FastMCP(name="proxy") if fastmcp3 else FastMCP(name="proxy", include_fastmcp_meta=False)
 
     original_run = base_app._mcp_server.run  # noqa: SLF001
 
@@ -70,8 +72,7 @@ def proxy_backend():
 
     base_app._mcp_server.run = run_with_patched_session  # noqa: SLF001
 
-    if hasattr(base_app, "providers"):  # fastmcp 3 replaced the three `_mounted_servers` lists with one provider list
-        from fastmcp.server import create_proxy  # fastmcp 3 split this out of `FastMCP.as_proxy`
+    if fastmcp3:  # fastmcp 3 replaced the three `_mounted_servers` lists with one provider list
 
         @contextmanager
         def mount(app):
@@ -110,14 +111,11 @@ def proxy_backend():
                 await session.send_log_message("warning", e)
 
     async def notify():
-        for session in list(active_sessions):
-            await notify_list_changed(session)
+        async with TaskGroup() as tg:  # one slow client must not delay the others
+            for session in list(active_sessions):
+                tg.create_task(notify_list_changed(session))
 
     return base_app, mount, notify
-
-
-# every registry an MCPServer looks things up in — swapping these swaps the whole served surface
-_REGISTRIES = {"_tool_manager": ("_tools",), "_resource_manager": ("_resources", "_templates"), "_prompt_manager": ("_prompts",)}
 
 
 def swap_backend():
@@ -133,21 +131,21 @@ def swap_backend():
     from mcp.server import MCPServer
     from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged
 
+    # every registry an MCPServer looks things up in — swapping these swaps the whole served surface
+    registries = ("_tool_manager", "_tools"), ("_resource_manager", "_resources"), ("_resource_manager", "_templates"), ("_prompt_manager", "_prompts")
+
     bus = InMemorySubscriptionBus()
     base_app = MCPServer("proxy", subscriptions=bus)
 
-    def read(app: MCPServer):
-        return {(manager, slot): getattr(getattr(app, manager), slot) for manager, slots in _REGISTRIES.items() for slot in slots}
+    def install(app: MCPServer):
+        for manager, slot in registries:
+            setattr(getattr(base_app, manager), slot, getattr(getattr(app, manager), slot))
 
-    def install(registries):
-        for (manager, slot), registry in registries.items():
-            setattr(getattr(base_app, manager), slot, registry)
-
-    empty = read(base_app)  # captured before anything is mounted
+    empty = MCPServer("empty")  # a pristine server, to restore the registries from on unmount
 
     @contextmanager
     def mount(app: MCPServer):
-        install(read(app))
+        install(app)
         try:
             yield
         finally:  # unmount
@@ -247,12 +245,13 @@ def mcp_server(target: str):
     return _()
 
 
-def _mcpserver_kwargs(kwargs: dict, path_key: str):
+def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
     """MCPServer's runners accept a subset of FastMCP's options, and name the route path per transport."""
-    options = {k: v for k, v in kwargs.items() if k in {"host", "port", "json_response", "stateless_http"} and v is not None}
+    from inspect import signature
+
     if path := kwargs.get("path"):
-        options[path_key] = path
-    return options
+        kwargs = kwargs | {path_key: path}
+    return {k: v for k, v in kwargs.items() if k in signature(runner).parameters and v is not None}
 
 
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
@@ -262,9 +261,9 @@ async def run_with_hmr(target: str, log_level: str | None = None, transport="std
                 case "stdio":
                     return await mcp.run_stdio_async()
                 case "sse":
-                    return await mcp.run_sse_async(**_mcpserver_kwargs(kwargs, "sse_path"))
+                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
                 case _:
-                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(kwargs, "streamable_http_path"))
+                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
         match transport:
             case "stdio":
                 await mcp.run_stdio_async(show_banner=False, log_level=log_level)
