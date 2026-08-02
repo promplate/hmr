@@ -180,6 +180,7 @@ def mcp_server(target: str):
 
     from asyncio import Event, Lock, TaskGroup
     from contextlib import asynccontextmanager
+    from traceback import print_exc
 
     from reactivity import async_effect, derived
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, _loader
@@ -193,9 +194,13 @@ def mcp_server(target: str):
 
     async def using(app, stop_event: Event, finish_event: Event):
         async with lock:
-            with mount(app):
-                tg.create_task(notify())
-                await stop_event.wait()
+            try:
+                with mount(app):
+                    tg.create_task(notify())
+                    await stop_event.wait()
+            except Exception:  # an unmountable target (a wrong `attr`, or a backend the blind first-load pick got wrong) must not take the connection down with it
+                print_exc()
+            finally:
                 finish_event.set()
 
     if Path(module).is_file():  # module:attr
