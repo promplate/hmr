@@ -171,8 +171,12 @@ def pick_backend(app):
         from mcp.server import MCPServer  # type: ignore
     except ImportError:  # mcp 1.x
         return proxy_backend()
-    # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
-    return swap_backend() if isinstance(app, MCPServer | Exception) else proxy_backend()
+    if not isinstance(app, MCPServer | Exception):
+        try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
+            return proxy_backend()
+        except ImportError:  # no fastmcp to proxy with, and the target is not an `MCPServer` either — still hand back a server, so the client can connect and pick up the fix
+            pass
+    return swap_backend()
 
 
 def mcp_server(target: str):
