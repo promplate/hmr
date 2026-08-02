@@ -13,6 +13,10 @@ dependencies = [
 [tool.uv.workspace]
 members = ["examples/*", "packages/*"]
 
+# fastmcp 2.x declares `mcp>=1.24.0` with no upper bound, so uv happily resolves mcp 2.x — a combination it cannot run on
+[tool.uv]
+constraint-dependencies = ["mcp<2"]
+
 [tool.uv.sources]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }

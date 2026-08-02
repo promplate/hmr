@@ -35,6 +35,8 @@ mcp-hmr main:app
 
 Now, whenever you save changes to your source code, the server will automatically reload without dropping the connection to the client.
 
+This isn't limited to `.py` files: any file your modules read at import time — a prompt template, a JSON config, a `.md` — is tracked too, so editing it reloads the server just the same. See [`examples/mcp`](https://github.com/promplate/hmr/tree/HEAD/examples/mcp) for a runnable demo.
+
 The CLI provides a simple way to get started, but if you need more control, you can also use `mcp_hmr` programmatically.
 
 ### Options

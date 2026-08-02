@@ -39,5 +39,6 @@ It uses the MCP server defined in `main.py`. Now open your favorite editor and m
 
 - Try changing the `echo` tool's return value or the `greet` resource's content.
 - You will see the client output update to reflect your changes without restarting the connection.
+- Try editing `greeting.txt` too. It isn't a Python module, but `main.py` reads it at import time, so HMR tracks it and reloads the server just the same.
 
 This demo shows how to use `mcp-hmr` to enable seamless hot reloading for MCP servers, maintaining the connection between client and server while updating the code on-the-fly.

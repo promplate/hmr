@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastmcp import FastMCP
 
 # from mcp.server.fastmcp import FastMCP  # FastMCP v1 is also supported!
@@ -7,6 +9,9 @@ from fastmcp import FastMCP
 
 app = FastMCP()
 
+# read at import time, so HMR tracks it: editing `greeting.txt` reloads the module just like editing this file would
+greeting = Path(__file__).parent.joinpath("greeting.txt").read_text()
+
 
 @app.tool()
 def echo(message: str):
@@ -15,7 +20,7 @@ def echo(message: str):
 
 @app.resource("example://greet")
 def greet():
-    return "hello world"
+    return greeting
 
 
 # `mcp-hmr main:app` is equivalent to:

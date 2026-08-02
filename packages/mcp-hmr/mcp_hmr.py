@@ -132,8 +132,8 @@ def swap_backend():
 
     from contextlib import contextmanager
 
-    from mcp.server import MCPServer
-    from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged
+    from mcp.server import MCPServer  # type: ignore
+    from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
 
     # every registry an MCPServer looks tools/resources/prompts up in — extensions, custom routes, middleware and lifespan stay the outer server's
     registries = ("_tool_manager", "_tools"), ("_resource_manager", "_resources"), ("_resource_manager", "_templates"), ("_prompt_manager", "_prompts")
@@ -167,7 +167,7 @@ def swap_backend():
 
 def pick_backend(app):
     try:
-        from mcp.server import MCPServer
+        from mcp.server import MCPServer  # type: ignore
     except ImportError:  # mcp 1.x
         return proxy_backend()
     # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
