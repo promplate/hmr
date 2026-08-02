@@ -1,6 +1,7 @@
 from fastmcp import FastMCP
 
 # from mcp.server.fastmcp import FastMCP  # FastMCP v1 is also supported!
+# from mcp.server import MCPServer  # `mcp` 2.x is also supported!
 # from mcp_use import MCPServer  # mcp-use is also supported!
 
 

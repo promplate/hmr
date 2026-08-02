@@ -165,12 +165,13 @@ def swap_backend():
     return base_app, mount, notify
 
 
-def pick_backend():
+def pick_backend(app):
     try:
-        from mcp.server import MCPServer  # noqa: F401
+        from mcp.server import MCPServer
     except ImportError:  # mcp 1.x
         return proxy_backend()
-    return swap_backend()
+    # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
+    return swap_backend() if isinstance(app, MCPServer) else proxy_backend()
 
 
 def mcp_server(target: str):
@@ -183,7 +184,9 @@ def mcp_server(target: str):
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, _loader
     from reactivity.hmr.hooks import call_post_reload_hooks, call_pre_reload_hooks
 
-    base_app, mount, notify = pick_backend()
+    base_app: Any = ...  # base_app / mount / notify are picked from the target itself on first load
+    mount: Any = ...
+    notify: Any = ...
 
     lock = Lock()
 
@@ -214,13 +217,16 @@ def mcp_server(target: str):
 
     @async_effect(context=HMR_CONTEXT, call_immediately=False)
     async def main():
-        nonlocal stop_event, finish_event
+        nonlocal stop_event, finish_event, base_app, mount, notify
 
         if stop_event is not None:
             stop_event.set()
             await finish_event.wait()
 
         app = get_app()
+
+        if base_app is ...:
+            base_app, mount, notify = pick_backend(app)
 
         tg.create_task(using(app, stop_event := Event(), finish_event := Event()))
 
@@ -273,22 +279,22 @@ async def run_with_hmr(target: str, log_level: str | None = None, transport="std
                 case "stdio":
                     return await mcp.run_stdio_async()
                 case "sse":
-                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))  # type: ignore
+                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
                 case _:
-                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))  # type: ignore
+                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
         match transport:
             case "stdio":
-                await mcp.run_stdio_async(show_banner=False, log_level=log_level)  # type: ignore
+                await mcp.run_stdio_async(show_banner=False, log_level=log_level)
             case "http" | "streamable-http":
-                await mcp.run_http_async(log_level=log_level, **kwargs)  # type: ignore
+                await mcp.run_http_async(log_level=log_level, **kwargs)
             case "sse":
                 # for older FastMCP versions
                 if hasattr(mcp, "run_sse_async"):
-                    await mcp.run_sse_async(log_level=log_level, **kwargs)  # type: ignore
+                    await mcp.run_sse_async(log_level=log_level, **kwargs)
                 else:
-                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)  # type: ignore
+                    await mcp.run_http_async(transport="sse", log_level=log_level, **kwargs)
             case _:
-                await mcp.run_async(transport, log_level=log_level, **kwargs)  # type: ignore
+                await mcp.run_async(transport, log_level=log_level, **kwargs)
 
 
 def cli(argv: list[str] = sys.argv[1:]):
