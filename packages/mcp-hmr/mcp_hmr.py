@@ -166,12 +166,13 @@ def swap_backend():
 
 
 def pick_backend(app):
+    """`app` is `None` when the very first load failed — then the environment is all we have to go on."""
     try:
         from mcp.server import MCPServer  # type: ignore
     except ImportError:  # mcp 1.x
         return proxy_backend()
     # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
-    return swap_backend() if isinstance(app, MCPServer) else proxy_backend()
+    return swap_backend() if app is None or isinstance(app, MCPServer) else proxy_backend()
 
 
 def mcp_server(target: str):
@@ -199,17 +200,26 @@ def mcp_server(target: str):
 
     if Path(module).is_file():  # module:attr
 
-        @derived(context=HMR_CONTEXT)
-        def get_app():
+        def load_app():
             if (mod := sys.modules.get("server_module")) is None:
                 sys.modules["server_module"] = mod = module_from_spec(ModuleSpec("server_module", _loader, origin=module))
             return getattr(mod, attr)
 
     else:  # path:attr
 
-        @derived(context=HMR_CONTEXT)
-        def get_app():
+        def load_app():
             return getattr(import_module(module), attr)
+
+    @derived(context=HMR_CONTEXT)
+    def get_app():
+        try:
+            return load_app()
+        except Exception:
+            pass  # a failing load aborts before the attribute itself is ever read, so we'd only be subscribed to the load — retry now that it has settled, to also subscribe to the attribute a fixed module will define
+        try:
+            return load_app()
+        except Exception as e:
+            return e  # a broken load must still yield a *value*: a derived that never held one stays "unset", and its first success would notify nobody
 
     stop_event: Event | None = None
     finish_event: Event = ...  # type: ignore
@@ -224,9 +234,10 @@ def mcp_server(target: str):
             await finish_event.wait()
 
         app = get_app()
-
-        if base_app is ...:
-            base_app, mount, notify = pick_backend(app)
+        if base_app is ...:  # a failed first load still needs a server to hand to the transport, so the client can connect and pick up the fix
+            base_app, mount, notify = pick_backend(None if isinstance(app, Exception) else app)
+        if isinstance(app, Exception):
+            raise app
 
         tg.create_task(using(app, stop_event := Event(), finish_event := Event()))
 
@@ -238,7 +249,8 @@ def mcp_server(target: str):
         async def __aenter__(self):
             call_pre_reload_hooks()
             try:
-                await main()
+                with self.error_filter:  # a broken module is reported and then waited on, exactly like every later reload
+                    await main()
             finally:
                 call_post_reload_hooks()
                 tg.create_task(self.start_watching())
