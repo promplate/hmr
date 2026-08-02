@@ -83,17 +83,17 @@ mcp-hmr main:app -t streamable-http --port 8000
 ## Programmatic API
 
 For more advanced use cases, you can integrate `mcp_hmr` directly into your existing codebase.
-Say you have a FastAPI server `app`:
+Say you want to serve it from a FastAPI app of your own:
 
 ```python
 from mcp_hmr import mcp_server
 from uvicorn import Config, Server
 
-app: FastAPI = ...
-
 async with mcp_server("path/to/mcp-server.py:mcp") as mcp:
     # mcp.add_middleware(...)
-    app.mount("/", mcp.http_app("/mcp"))  # mount the auto-reloading MCP server to your FastAPI app
+    mcp_app = mcp.http_app("/mcp")
+    app = FastAPI(lifespan=mcp_app.lifespan)  # without inheriting this lifespan, every request fails with "Task group is not initialized"
+    app.mount("/", mcp_app)  # mount the auto-reloading MCP server to your FastAPI app
     await Server(Config(app)).serve()
 ```
 
