@@ -201,8 +201,8 @@ def mcp_server(target: str):
     if Path(module).is_file():  # module:attr
 
         def load_app():
-            if (mod := sys.modules.get("server_module")) is None:
-                sys.modules["server_module"] = mod = module_from_spec(ModuleSpec("server_module", _loader, origin=module))
+            if (mod := sys.modules.get(module)) is None:  # keyed by path, not a fixed name: two `mcp_server` contexts in one process must not share a module
+                sys.modules[module] = mod = module_from_spec(ModuleSpec(module, _loader, origin=module))
             return getattr(mod, attr)
 
     else:  # path:attr
