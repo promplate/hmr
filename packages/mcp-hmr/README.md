@@ -154,3 +154,5 @@ No extra setup is required when you use the `mcp-hmr` CLI, `mcp_server()`, or `r
 > ```
 >
 > Of course the simplest approach is `await mcp.run_async()` directly. The task group example above assumes you already have some existing lifespan management that requires running the MCP server within a task group.
+>
+> 4. Run only one `mcp_server()` per process. Reloading is driven by a single process-wide reactive context, so two live instances interleave their reload batches and one of them can silently stop picking up edits.
