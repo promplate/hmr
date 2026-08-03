@@ -7,7 +7,7 @@ Provides [Hot Module Reloading](https://pyth-on-line.promplate.dev/hmr) for MCP/
 
 It acts as **a drop-in replacement for `mcp run path:app` or `fastmcp run path:app`.** Both [FastMCP](https://github.com/jlowin/fastmcp) (v2 and v3) and the [official python SDK](https://github.com/modelcontextprotocol/python-sdk) (`mcp` 1.x and 2.x) are supported. Compatible libraries like [mcp-use](https://github.com/mcp-use/mcp-use/tree/main/libraries/python) are also supported.
 
-`mcp` 1.x and 2.x are the same distribution and cannot be installed side by side. Neither is a dependency of `mcp-hmr` — install it next to the server you already have, and it adapts to whichever generation is there:
+`mcp` 1.x and 2.x are the same distribution and cannot be installed side by side. Neither is a dependency of `mcp-hmr` — install it next to the server you already have, and it adapts to whichever generation is there. On `mcp` 1.x it fronts the target with a FastMCP proxy, so that generation additionally needs `fastmcp` installed — whether the target itself uses it or not.
 
 ```sh
 pip install mcp-hmr
