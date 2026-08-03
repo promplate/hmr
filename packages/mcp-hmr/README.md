@@ -99,7 +99,7 @@ async with mcp_server("path/to/mcp-server.py:mcp") as mcp:
 
 This is useful when you want to extend your server with additional features like CORS middleware while maintaining HMR capabilities.
 
-Whichever backend gets picked, the target is reached over MCP or through its registries — never mounted as an ASGI app. So routes it declares with `@custom_route` are not served, and `auth` it declares is not enforced: both belong on the outer app instead, or the tools would be served unauthenticated. A `lifespan` it declares does run on the FastMCP backends, but once per proxied request rather than once at startup — so it is the wrong place for a connection pool. The `name` and `instructions` it passes to its own constructor don't reach clients either, since the outer server supplies its own.
+Whichever backend gets picked, the target is reached over MCP or through its registries — never mounted as an ASGI app. So routes it declares with `@custom_route` are not served, and `auth` it declares is not enforced: both belong on the outer app instead, or the tools would be served unauthenticated. A `lifespan` it declares does run on the FastMCP backends, but once per proxied request rather than once at startup — so it is the wrong place for a connection pool. The `name` and `instructions` it passes to its own constructor don't reach clients either, since the outer server supplies its own. And if the target `mount`s a sub-server defined in another module, saving both files in the same instant can leave the sub-server's tools one generation behind — the next save of either file brings them back in sync.
 
 ### List Changed Notifications
 
