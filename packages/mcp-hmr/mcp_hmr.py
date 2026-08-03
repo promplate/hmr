@@ -340,7 +340,7 @@ def cli(argv: list[str] = sys.argv[1:]):
     parser = ArgumentParser("mcp-hmr", description="Hot Reloading for MCP Servers • Automatically reload on code changes")
     if sys.version_info >= (3, 14):
         parser.suggest_on_error = True
-    parser.add_argument("target", help="The import path of the FastMCP instance. Supports module:attr and path:attr")
+    parser.add_argument("target", help="The import path of the server instance. Supports module:attr and path:attr")
     parser.add_argument("-t", "--transport", choices=["stdio", "http", "sse", "streamable-http"], default="stdio", help="Transport protocol to use (default: stdio)")
     parser.add_argument("-l", "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], type=str.upper, default=None)
     parser.add_argument("--host", default="localhost", help="Host to bind to for http/sse transports (default: localhost)")
