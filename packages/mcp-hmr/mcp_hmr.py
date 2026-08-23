@@ -243,7 +243,13 @@ def pick_backend(app):
     except ImportError:  # mcp 1.x
         try:
             return proxy_backend()
-        except ImportError:  # no fastmcp: swap the registries in place instead — same trick as 2.x, and 1.x keeps them in the same slots
+        except ImportError:  # no usable fastmcp proxy — swap the registries in place instead, which only works because 1.x keeps them in the same slots 2.x does
+            from mcp.server.fastmcp import FastMCP
+
+            if not isinstance(app, FastMCP | Exception):  # a standalone-fastmcp target keeps its own manager classes, and the SDK's handlers cannot read them
+                raise ImportError(
+                    f"mcp-hmr cannot serve a {type(app).__name__} target without a fastmcp new enough to proxy with. Upgrade `fastmcp`, or use the SDK's own `mcp.server.fastmcp.FastMCP`."
+                ) from None
             return swap_backend_1x()
     if not isinstance(app, MCPServer):  # a load error lands here too: the proxy speaks MCP, so it hosts either target type, while `swap_backend` only understands `MCPServer` registries
         try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy
