@@ -49,10 +49,8 @@ def _install_notifier(base_app):
     notify — 2.x routes list-changed through a subscription bus instead, and fastmcp leaves that handler unset.
     """
 
-    try:
-        from mcp.server.lowlevel.server import HandlerEntry  # type: ignore
-        from mcp.server.subscriptions import InMemorySubscriptionBus, ListenHandler, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
-        from mcp.types import SubscriptionsListenRequestParams  # type: ignore
+    try:  # the era, decided by the one symbol that names it — a renamed subscription symbol below must not read as "this is 1.x"
+        from mcp.server import MCPServer  # type: ignore  # noqa: F401
     except ImportError:  # mcp 1.x
         server = base_app._mcp_server  # noqa: SLF001
         original_run = server.run
@@ -68,8 +66,15 @@ def _install_notifier(base_app):
 
         return notify_sessions
 
+    from mcp.server.lowlevel.server import HandlerEntry  # type: ignore
+    from mcp.server.subscriptions import InMemorySubscriptionBus, ListenHandler, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
+    from mcp.types import SubscriptionsListenRequestParams  # type: ignore
+
     bus = InMemorySubscriptionBus()
-    base_app._mcp_server._request_handlers["subscriptions/listen"] = HandlerEntry(SubscriptionsListenRequestParams, ListenHandler(bus))  # noqa: SLF001
+    handlers = base_app._mcp_server._request_handlers  # noqa: SLF001
+    if "subscriptions/listen" in handlers:  # a fastmcp that grows its own listen handler owns the bus; ours would silently replace it
+        raise NotImplementedError("mcp-hmr installs the `subscriptions/listen` handler this fastmcp now provides itself — please report this at https://github.com/promplate/hmr/issues")
+    handlers["subscriptions/listen"] = HandlerEntry(SubscriptionsListenRequestParams, ListenHandler(bus))
 
     async def notify():
         for event in (ToolsListChanged(), ResourcesListChanged(), PromptsListChanged()):
