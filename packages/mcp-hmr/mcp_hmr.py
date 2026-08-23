@@ -156,26 +156,17 @@ def proxy_backend():
     return base_app, mount, notify
 
 
-def swap_backend():
-    """For mcp 2.x, which has no mount or proxy: swap the target's registries into a stable outer server.
+def _swap_mount(base_app):
+    """Both SDK eras look tools/resources/prompts up through the same three managers, so one swap serves both.
 
-    Unlike the proxy backend this talks Python, not MCP, so the target must be an `MCPServer` too.
-    Notifications go through the subscription bus, which only reaches clients that opened a
-    `subscriptions/listen` stream — on the 2026-07-28 wire there is no other channel to reach them.
+    Extensions, custom routes, middleware and lifespan stay the outer server's — only the registries move.
     """
 
     from contextlib import contextmanager
 
-    from mcp.server import MCPServer  # type: ignore
-    from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
-
-    # every registry an MCPServer looks tools/resources/prompts up in — extensions, custom routes, middleware and lifespan stay the outer server's
     registries = ("_tool_manager", "_tools"), ("_resource_manager", "_resources"), ("_resource_manager", "_templates"), ("_prompt_manager", "_prompts")
 
-    bus = InMemorySubscriptionBus()
-    base_app = MCPServer("proxy", subscriptions=bus)
-
-    def read(app: MCPServer):  # the containers themselves, not copies — while mounted, the target's live registries *are* the served ones
+    def read(app):  # the containers themselves, not copies — while mounted, the target's live registries *are* the served ones
         return [getattr(getattr(app, manager), slot) for manager, slot in registries]
 
     def install(values):
@@ -185,18 +176,58 @@ def swap_backend():
     empty = read(base_app)  # captured before anything is mounted
 
     @contextmanager
-    def mount(app: MCPServer):
+    def mount(app):
         install(read(app))
         try:
             yield
         finally:  # unmount
             install(empty)
 
+    return mount
+
+
+def swap_backend_1x():
+    """For mcp 1.x with no fastmcp to proxy with: the registries are plain dicts, so the same swap works.
+
+    The target must be a `mcp.server.fastmcp.FastMCP` too. `list_changed` has to be forced on, because
+    1.x derives capabilities from a `NotificationOptions` that every transport leaves defaulted to off.
+    """
+
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.lowlevel.server import NotificationOptions
+
+    base_app = FastMCP(name="proxy")
+    server = base_app._mcp_server  # noqa: SLF001
+
+    original_create_initialization_options = server.create_initialization_options
+
+    def advertise_list_changed(notification_options=None, experimental_capabilities=None):  # every transport reaches the handshake through here, so one patch covers all three
+        return original_create_initialization_options(notification_options or NotificationOptions(prompts_changed=True, resources_changed=True, tools_changed=True), experimental_capabilities)
+
+    server.create_initialization_options = advertise_list_changed
+
+    return base_app, _swap_mount(base_app), _install_notifier(base_app)
+
+
+def swap_backend():
+    """For mcp 2.x, which has no mount or proxy: swap the target's registries into a stable outer server.
+
+    Unlike the proxy backend this talks Python, not MCP, so the target must be an `MCPServer` too.
+    Notifications go through the subscription bus, which only reaches clients that opened a
+    `subscriptions/listen` stream — on the 2026-07-28 wire there is no other channel to reach them.
+    """
+
+    from mcp.server import MCPServer  # type: ignore
+    from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
+
+    bus = InMemorySubscriptionBus()
+    base_app = MCPServer("proxy", subscriptions=bus)
+
     async def notify():
         for event in (ToolsListChanged(), ResourcesListChanged(), PromptsListChanged()):
             await bus.publish(event)
 
-    return base_app, mount, notify
+    return base_app, _swap_mount(base_app), notify
 
 
 def pick_backend(app):
@@ -204,7 +235,10 @@ def pick_backend(app):
     try:
         from mcp.server import MCPServer  # type: ignore
     except ImportError:  # mcp 1.x
-        return proxy_backend()
+        try:
+            return proxy_backend()
+        except ImportError:  # no fastmcp: swap the registries in place instead — same trick as 2.x, and 1.x keeps them in the same slots
+            return swap_backend_1x()
     if not isinstance(app, MCPServer | Exception):
         try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
             return proxy_backend()
