@@ -16,29 +16,42 @@ active_sessions = WeakSet()
 
 _pending_patches = 0
 
+_original_session_init = None  # the real one, captured once: re-reading it per arm would let a second arm capture the first arm's wrapper, and nothing would ever unwind
+
 
 def patch_session_init():
-    global _pending_patches
-    _pending_patches += 1
+    """Arm a one-shot capture of the next `ServerSession`. Overlapping arms are counted, not nested."""
+
+    global _pending_patches, _original_session_init
 
     from mcp.server.session import ServerSession
 
-    original_session_init = ServerSession.__init__
+    if _original_session_init is None:
+        _original_session_init = ServerSession.__init__
 
-    def _capture_session_init(self: ServerSession, *args, **kwargs):
-        original_session_init(self, *args, **kwargs)
-        active_sessions.add(self)
-        global _pending_patches
+        def capture_session_init(self: ServerSession, *args, **kwargs):
+            _original_session_init(self, *args, **kwargs)  # type: ignore
+            active_sessions.add(self)
+            disarm()
+
+        ServerSession.__init__ = capture_session_init
+
+    _pending_patches += 1
+
+    disarmed = False
+
+    def disarm():  # idempotent per arm, so a captured session and an exiting transport cannot double-count
+        nonlocal disarmed
+        global _pending_patches, _original_session_init
+        if disarmed:
+            return
+        disarmed = True
         _pending_patches -= 1
-        unpatch()
+        if _pending_patches < 1 and _original_session_init is not None:
+            ServerSession.__init__ = _original_session_init
+            _original_session_init = None
 
-    ServerSession.__init__ = _capture_session_init
-
-    def unpatch():
-        if _pending_patches < 1:
-            ServerSession.__init__ = original_session_init
-
-    return unpatch
+    return disarm
 
 
 def _install_notifier(base_app):
