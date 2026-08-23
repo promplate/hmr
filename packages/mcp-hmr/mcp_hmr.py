@@ -121,10 +121,15 @@ def proxy_backend():
     # fastmcp 3 dropped this kwarg together with the metadata it used to suppress
     no_meta: dict[str, Any] = {} if fastmcp3 else {"include_fastmcp_meta": False}
 
-    # `ProxyClient` defaults to `mode="legacy"` where `Client` defaults to `"auto"`, so on an mcp 2.x backend
-    # every proxied *call* is refused for carrying a modern envelope on a handshake-era connection. Only
-    # fastmcp 4 knows the kwarg at all, and there it mirrors the front connection's era onto the backend.
-    negotiate: dict[str, Any] = {"mode": "auto"} if "mode" in signature(Client.__init__).parameters else {}
+    # Handing `create_proxy` the target itself rather than a `ProxyClient` is what makes fastmcp 4 mirror the
+    # front connection's protocol era onto the backend per request. Wrapping it first pins the backend to the
+    # client's own era instead: `ProxyClient` defaults to `"legacy"`, which refuses every modern-envelope call,
+    # and pinning `"auto"` fixes the calls but drops the back-channel a legacy front needs for sampling and
+    # elicitation. Only fastmcp 4 negotiates eras at all; before it, `ProxyClient` is what forwards those.
+    era_negotiated = "mode" in signature(Client.__init__).parameters
+
+    def backend(app):
+        return app if era_negotiated else ProxyClient(app)
 
     base_app = FastMCP(name="proxy", **no_meta)
 
@@ -134,7 +139,7 @@ def proxy_backend():
 
         @contextmanager
         def mount(app):
-            base_app.mount(create_proxy(ProxyClient(app, **negotiate)))  # type: ignore
+            base_app.mount(create_proxy(backend(app)))  # type: ignore
             provider = base_app.providers[-1]  # type: ignore
             try:
                 yield
@@ -145,7 +150,7 @@ def proxy_backend():
 
         @contextmanager
         def mount(app):
-            base_app.mount(proxy := FastMCP.as_proxy(ProxyClient(app, **negotiate)), as_proxy=False)
+            base_app.mount(proxy := FastMCP.as_proxy(backend(app)), as_proxy=False)
             try:
                 yield
             finally:  # unmount
