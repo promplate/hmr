@@ -510,7 +510,11 @@ def cli(argv: list[str] = sys.argv[1:]):
 
         try:
             found = find_spec(module_or_path) is not None
-        except (ImportError, ValueError):  # a dotted name whose parent package is missing raises instead of returning `None` — `./main.py:app` typo'd as `main.py:app` lands here
+        except ValueError:  # a name already in `sys.modules` but without a spec
+            found = False
+        except ImportError as e:  # a dotted name raises instead of returning `None` when a parent is missing — but importing it also runs the parents, so only the target's own absence belongs here
+            if e.name is not None and not module_or_path.startswith(e.name):
+                raise
             found = False
 
         if not found:
