@@ -395,6 +395,12 @@ def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
 
 def _apply_settings(mcp, kwargs: dict):
     """mcp 1.x's own `FastMCP` takes no runner kwargs at all — host, port and route path come from `settings`."""
+    host = kwargs.get("host")
+    if host is not None and host not in ("127.0.0.1", "localhost", "::1"):
+        # 1.x auto-enables DNS-rebinding protection when *constructed* on a loopback host, and we build the
+        # outer server long before `--host` reaches here — so the allowlist would reject the very address the
+        # socket now binds. Serving a non-loopback host is an explicit request; honor it rather than 421.
+        mcp.settings.transport_security = None
     settings = {key: kwargs.get(key) for key in ("host", "port", "log_level", "json_response", "stateless_http")}
     if path := kwargs.get("path"):
         settings |= {"streamable_http_path": path, "sse_path": path}
