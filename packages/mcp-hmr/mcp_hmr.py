@@ -104,8 +104,9 @@ def proxy_backend():
     """For mcp 1.x, where nothing can swap a live server's contents: front the target with a FastMCP proxy."""
 
     from contextlib import contextmanager, suppress
+    from inspect import signature
 
-    from fastmcp import FastMCP
+    from fastmcp import Client, FastMCP
 
     try:  # fastmcp 3 moved the proxy module and split `create_proxy` out of `FastMCP.as_proxy`
         from fastmcp.server import create_proxy  # type: ignore
@@ -120,6 +121,11 @@ def proxy_backend():
     # fastmcp 3 dropped this kwarg together with the metadata it used to suppress
     no_meta: dict[str, Any] = {} if fastmcp3 else {"include_fastmcp_meta": False}
 
+    # `ProxyClient` defaults to `mode="legacy"` where `Client` defaults to `"auto"`, so on an mcp 2.x backend
+    # every proxied *call* is refused for carrying a modern envelope on a handshake-era connection. Only
+    # fastmcp 4 knows the kwarg at all, and there it mirrors the front connection's era onto the backend.
+    negotiate: dict[str, Any] = {"mode": "auto"} if "mode" in signature(Client.__init__).parameters else {}
+
     base_app = FastMCP(name="proxy", **no_meta)
 
     notify = _install_notifier(base_app)
@@ -128,7 +134,7 @@ def proxy_backend():
 
         @contextmanager
         def mount(app):
-            base_app.mount(create_proxy(ProxyClient(app)))  # type: ignore
+            base_app.mount(create_proxy(ProxyClient(app, **negotiate)))  # type: ignore
             provider = base_app.providers[-1]  # type: ignore
             try:
                 yield
@@ -139,7 +145,7 @@ def proxy_backend():
 
         @contextmanager
         def mount(app):
-            base_app.mount(proxy := FastMCP.as_proxy(ProxyClient(app)), as_proxy=False)
+            base_app.mount(proxy := FastMCP.as_proxy(ProxyClient(app, **negotiate)), as_proxy=False)
             try:
                 yield
             finally:  # unmount
