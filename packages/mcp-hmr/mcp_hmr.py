@@ -343,7 +343,8 @@ def mcp_server(target: str):
 
     class Reloader(AsyncReloader):
         def __init__(self):
-            super().__init__(".")
+            super().__init__(".")  # this inserts a `ReactiveModuleFinder` at the front of `sys.meta_path`, and 0.7.6.3 offers no way to take it back out
+            self.finder = sys.meta_path[0]
             self.error_filter.exclude_filenames.add(__file__)
 
         async def __aenter__(self):
@@ -358,6 +359,8 @@ def mcp_server(target: str):
         async def __aexit__(self, *_):
             self.stop_watching()
             main.dispose()
+            if self.finder in sys.meta_path:  # else every `mcp_server()` in a process leaves one behind
+                sys.meta_path.remove(self.finder)
             if stop_event:
                 stop_event.set()
 
