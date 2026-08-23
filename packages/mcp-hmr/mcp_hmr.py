@@ -41,14 +41,71 @@ def patch_session_init():
     return unpatch
 
 
+def _install_notifier(base_app):
+    """Give a `FastMCP` outer server a working list-changed channel, whichever SDK it sits on.
+
+    On mcp 1.x that means capturing the session, which is per-connection and has the `send_*_list_changed`
+    methods. On mcp 2.x the session is rebuilt per request, so a captured one is dead by the time we would
+    notify — 2.x routes list-changed through a subscription bus instead, and fastmcp leaves that handler unset.
+    """
+
+    try:
+        from mcp.server.lowlevel.server import HandlerEntry  # type: ignore
+        from mcp.server.subscriptions import InMemorySubscriptionBus, ListenHandler, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
+        from mcp.types import SubscriptionsListenRequestParams  # type: ignore
+    except ImportError:  # mcp 1.x
+        server = base_app._mcp_server  # noqa: SLF001
+        original_run = server.run
+
+        async def run_with_patched_session(*args, **kwargs):
+            unpatch = patch_session_init()
+            try:
+                await original_run(*args, **kwargs)
+            finally:
+                unpatch()
+
+        server.run = run_with_patched_session
+
+        return notify_sessions
+
+    bus = InMemorySubscriptionBus()
+    base_app._mcp_server._request_handlers["subscriptions/listen"] = HandlerEntry(SubscriptionsListenRequestParams, ListenHandler(bus))  # noqa: SLF001
+
+    async def notify():
+        for event in (ToolsListChanged(), ResourcesListChanged(), PromptsListChanged()):
+            await bus.publish(event)
+
+    return notify
+
+
+async def notify_sessions():
+    """1.x speaks list-changed straight over the session — the only channel a 1.x client has."""
+
+    from asyncio import TaskGroup
+    from contextlib import suppress
+
+    from mcp.server.session import ServerSession
+
+    async def notify_one(session: ServerSession):
+        try:
+            await session.send_tool_list_changed()
+            await session.send_resource_list_changed()
+            await session.send_prompt_list_changed()
+        except Exception as e:
+            with suppress(Exception):
+                await session.send_log_message("warning", str(e))  # the raw exception would only fail to serialize later, in the transport's writer task
+
+    async with TaskGroup() as tg:  # one slow client must not delay the others
+        for session in list(active_sessions):
+            tg.create_task(notify_one(session))
+
+
 def proxy_backend():
     """For mcp 1.x, where nothing can swap a live server's contents: front the target with a FastMCP proxy."""
 
-    from asyncio import TaskGroup
     from contextlib import contextmanager, suppress
 
     from fastmcp import FastMCP
-    from mcp.server.session import ServerSession
 
     try:  # fastmcp 3 moved the proxy module and split `create_proxy` out of `FastMCP.as_proxy`
         from fastmcp.server import create_proxy  # type: ignore
@@ -65,16 +122,7 @@ def proxy_backend():
 
     base_app = FastMCP(name="proxy", **no_meta)
 
-    original_run = base_app._mcp_server.run  # noqa: SLF001
-
-    async def run_with_patched_session(*args, **kwargs):
-        unpatch = patch_session_init()
-        try:
-            await original_run(*args, **kwargs)
-        finally:
-            unpatch()
-
-    base_app._mcp_server.run = run_with_patched_session  # noqa: SLF001
+    notify = _install_notifier(base_app)
 
     if fastmcp3:  # fastmcp 3 replaced `_mounted_servers` (and the per-manager copies older 2.x kept) with a single `providers` list
 
@@ -104,20 +152,6 @@ def proxy_backend():
                             base_app._resource_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
                             base_app._prompt_manager._mounted_servers.remove(mounted_server)  # type: ignore  # noqa: SLF001
                         break
-
-    async def notify_list_changed(session: ServerSession):
-        try:
-            await session.send_tool_list_changed()
-            await session.send_resource_list_changed()
-            await session.send_prompt_list_changed()
-        except Exception as e:
-            with suppress(Exception):
-                await session.send_log_message("warning", str(e))  # the raw exception would only fail to serialize later, in the transport's writer task
-
-    async def notify():
-        async with TaskGroup() as tg:  # one slow client must not delay the others
-            for session in list(active_sessions):
-                tg.create_task(notify_list_changed(session))
 
     return base_app, mount, notify
 
