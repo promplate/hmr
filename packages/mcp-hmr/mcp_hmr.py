@@ -245,10 +245,10 @@ def pick_backend(app):
             return proxy_backend()
         except ImportError:  # no fastmcp: swap the registries in place instead — same trick as 2.x, and 1.x keeps them in the same slots
             return swap_backend_1x()
-    if not isinstance(app, MCPServer | Exception):
-        try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy — `swap_backend` only understands `MCPServer` registries
+    if not isinstance(app, MCPServer):  # a load error lands here too: the proxy speaks MCP, so it hosts either target type, while `swap_backend` only understands `MCPServer` registries
+        try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy
             return proxy_backend()
-        except ImportError:  # no fastmcp to proxy with, and the target is not an `MCPServer` either — still hand back a server, so the client can connect and pick up the fix
+        except ImportError:  # no fastmcp to proxy with — still hand back a server, so the client can connect and pick up the fix
             pass
     return swap_backend()
 
@@ -382,16 +382,9 @@ def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
     return _supported(runner, kwargs)
 
 
-def _takes_arguments(runner):
-    """`MCPServer` and mcp 1.x's `FastMCP` both lack `run_async`; only the latter's runners are argument-less."""
-    from inspect import signature
-
-    return bool(signature(runner).parameters)
-
-
 def _apply_settings(mcp, kwargs: dict):
     """mcp 1.x's own `FastMCP` takes no runner kwargs at all — host, port and route path come from `settings`."""
-    settings = {"host": kwargs.get("host"), "port": kwargs.get("port"), "log_level": kwargs.get("log_level")}
+    settings = {key: kwargs.get(key) for key in ("host", "port", "log_level", "json_response", "stateless_http")}
     if path := kwargs.get("path"):
         settings |= {"streamable_http_path": path, "sse_path": path}
     for key, value in settings.items():
@@ -404,7 +397,7 @@ def _apply_settings(mcp, kwargs: dict):
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
     async with mcp_server(target) as mcp:
         if not hasattr(mcp, "run_async"):  # not a fastmcp server: either an `MCPServer`, or mcp 1.x's own `FastMCP` — neither takes `log_level`
-            if not _takes_arguments(mcp.run_streamable_http_async):  # mcp 1.x's `FastMCP`, whose runners take no arguments at all
+            if hasattr(mcp, "_mcp_server"):  # mcp 1.x's `FastMCP`, whose runners take no arguments at all — `MCPServer` names its inner server `_lowlevel_server`
                 _apply_settings(mcp, kwargs | {"log_level": log_level})
                 match transport:
                     case "stdio":
