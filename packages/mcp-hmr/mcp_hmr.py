@@ -250,8 +250,10 @@ def swap_backend_1x():
 
     original_create_initialization_options = server.create_initialization_options
 
-    def advertise_list_changed(notification_options=None, experimental_capabilities=None):  # every transport reaches the handshake through here, so one patch covers all three
-        return original_create_initialization_options(notification_options or NotificationOptions(prompts_changed=True, resources_changed=True, tools_changed=True), experimental_capabilities)
+    def advertise_list_changed(notification_options=None, experimental_capabilities=None):  # noqa: ARG001  # every transport reaches the handshake through here, so one patch covers all three
+        # forced rather than defaulted: a caller passing its own options would otherwise advertise `listChanged=False`
+        # while we keep sending the notifications — and a default-constructed `NotificationOptions()` has them all off
+        return original_create_initialization_options(NotificationOptions(prompts_changed=True, resources_changed=True, tools_changed=True), experimental_capabilities)
 
     server.create_initialization_options = advertise_list_changed
 
