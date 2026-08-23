@@ -376,9 +376,37 @@ def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
     return _supported(runner, kwargs)
 
 
+def _takes_arguments(runner):
+    """`MCPServer` and mcp 1.x's `FastMCP` both lack `run_async`; only the latter's runners are argument-less."""
+    from inspect import signature
+
+    return bool(signature(runner).parameters)
+
+
+def _apply_settings(mcp, kwargs: dict):
+    """mcp 1.x's own `FastMCP` takes no runner kwargs at all — host, port and route path come from `settings`."""
+    settings = {"host": kwargs.get("host"), "port": kwargs.get("port"), "log_level": kwargs.get("log_level")}
+    if path := kwargs.get("path"):
+        settings |= {"streamable_http_path": path, "sse_path": path}
+    for key, value in settings.items():
+        if value is not None:
+            setattr(mcp.settings, key, value)
+    if kwargs.get("middleware"):
+        print("mcp-hmr: CORS is unavailable without fastmcp — mcp 1.x's own runners take no middleware", file=sys.stderr)
+
+
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
     async with mcp_server(target) as mcp:
-        if not hasattr(mcp, "run_async"):  # an MCPServer, which has no run_async, and whose runners take no log_level
+        if not hasattr(mcp, "run_async"):  # not a fastmcp server: either an `MCPServer`, or mcp 1.x's own `FastMCP` — neither takes `log_level`
+            if not _takes_arguments(mcp.run_streamable_http_async):  # mcp 1.x's `FastMCP`, whose runners take no arguments at all
+                _apply_settings(mcp, kwargs | {"log_level": log_level})
+                match transport:
+                    case "stdio":
+                        return await mcp.run_stdio_async()
+                    case "sse":
+                        return await mcp.run_sse_async()
+                    case _:
+                        return await mcp.run_streamable_http_async()
             match transport:
                 case "stdio":
                     return await mcp.run_stdio_async()
