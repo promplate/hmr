@@ -212,9 +212,15 @@ def _swap_mount(base_app):
     def read(app):  # the containers themselves, not copies — while mounted, the target's live registries *are* the served ones
         return [getattr(getattr(app, manager), slot) for manager, slot in registries]
 
+    # mcp 1.x keeps a second index of tool definitions that only refreshes on a *miss*, so a reload that changes an
+    # existing tool's schema would keep validating calls against the old one. 2.x dropped it.
+    tool_cache = getattr(getattr(base_app, "_mcp_server", None), "_tool_cache", None)
+
     def install(values):
         for (manager, slot), value in zip(registries, values, strict=True):
             setattr(getattr(base_app, manager), slot, value)
+        if tool_cache is not None:
+            tool_cache.clear()
 
     empty = read(base_app)  # captured before anything is mounted
 
@@ -306,11 +312,17 @@ def mcp_server(target: str):
 
     lock = Lock()
 
+    async def notify_quietly():
+        try:  # a notification is best-effort: failing to tell clients about a reload must not take the server down with it
+            await notify()
+        except Exception:
+            print_exc()
+
     async def using(app, stop_event: Event, finish_event: Event):
         async with lock:
             try:
                 with mount(app):
-                    tg.create_task(notify())
+                    tg.create_task(notify_quietly())
                     await stop_event.wait()
             except Exception:  # an unmountable target (a wrong `attr`, or a backend the blind first-load pick got wrong) must not take the connection down with it
                 print_exc()
@@ -393,6 +405,8 @@ def mcp_server(target: str):
     async def _():
         nonlocal tg
         async with TaskGroup() as tg, Reloader():
+            if base_app is ...:  # `pick_backend` raised, and the error filter reported it — there is no server to serve, and no edit that would make one
+                raise SystemExit(1)
             yield base_app
 
     return _()
@@ -429,6 +443,11 @@ def _apply_settings(mcp, kwargs: dict):
         # outer server long before `--host` reaches here — so the allowlist would reject the very address the
         # socket now binds. Serving a non-loopback host is an explicit request; honor it rather than 421.
         mcp.settings.transport_security = None
+    if log_level := kwargs.get("log_level"):
+        from logging import getLogger
+
+        getLogger().setLevel(log_level)  # 1.x configures logging while *constructing* the server, and its `basicConfig` is a no-op by the time `--log-level` reaches us
+
     settings = {key: kwargs.get(key) for key in ("host", "port", "log_level", "json_response", "stateless_http")}
     if path := kwargs.get("path"):
         settings |= {"streamable_http_path": path, "sse_path": path}
@@ -530,7 +549,7 @@ def cli(argv: list[str] = sys.argv[1:]):
         except ValueError:  # a name already in `sys.modules` but without a spec
             found = False
         except ImportError as e:  # a dotted name raises instead of returning `None` when a parent is missing — but importing it also runs the parents, so only the target's own absence belongs here
-            if e.name is not None and not module_or_path.startswith(e.name):
+            if e.name is not None and module_or_path != e.name and not module_or_path.startswith(f"{e.name}."):  # `zqx_app.main` missing `zqx` is a missing dependency, not a missing target
                 raise
             found = False
 
