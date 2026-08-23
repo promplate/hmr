@@ -495,7 +495,12 @@ def cli(argv: list[str] = sys.argv[1:]):
 
             patch_meta_path()
 
-        if find_spec(module_or_path) is None:
+        try:
+            found = find_spec(module_or_path) is not None
+        except (ImportError, ValueError):  # a dotted name whose parent package is missing raises instead of returning `None` — `./main.py:app` typo'd as `main.py:app` lands here
+            found = False
+
+        if not found:
             parser.exit(1, f"The target '{module_or_path}' not found. Please provide a valid module name or a file path.")
 
     try:  # noqa: SIM105
