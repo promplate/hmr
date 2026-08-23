@@ -47,7 +47,7 @@ def patch_session_init():
             return
         disarmed = True
         _pending_patches -= 1
-        if _pending_patches < 1 and _original_session_init is not None:
+        if _pending_patches < 1 and _original_session_init is not None:  # the `is not None` is what narrows the type here
             ServerSession.__init__ = _original_session_init
             _original_session_init = None
 
@@ -79,15 +79,29 @@ def _install_notifier(base_app):
 
         return notify_sessions
 
-    from mcp.server.lowlevel.server import HandlerEntry  # type: ignore
-    from mcp.server.subscriptions import InMemorySubscriptionBus, ListenHandler, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
+    from mcp.server.subscriptions import ListenHandler  # type: ignore
     from mcp.types import SubscriptionsListenRequestParams  # type: ignore
 
-    bus = InMemorySubscriptionBus()
-    handlers = base_app._mcp_server._request_handlers  # noqa: SLF001
-    if "subscriptions/listen" in handlers:  # a fastmcp that grows its own listen handler owns the bus; ours would silently replace it
+    server = base_app._mcp_server  # noqa: SLF001
+    if "subscriptions/listen" in server._request_handlers:  # noqa: SLF001  # a fastmcp that grows its own listen handler owns the bus; ours would silently replace it
         raise NotImplementedError("mcp-hmr installs the `subscriptions/listen` handler this fastmcp now provides itself — please report this at https://github.com/promplate/hmr/issues")
-    handlers["subscriptions/listen"] = HandlerEntry(SubscriptionsListenRequestParams, ListenHandler(bus))
+
+    bus = _subscription_bus()
+    server.add_request_handler("subscriptions/listen", SubscriptionsListenRequestParams, ListenHandler(bus))
+
+    return _notify_bus(bus)
+
+
+def _subscription_bus():
+    from mcp.server.subscriptions import InMemorySubscriptionBus  # type: ignore
+
+    return InMemorySubscriptionBus()
+
+
+def _notify_bus(bus):
+    """mcp 2.x publishes list-changed as events — the 2.x counterpart of `notify_sessions`."""
+
+    from mcp.server.subscriptions import PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
 
     async def notify():
         for event in (ToolsListChanged(), ResourcesListChanged(), PromptsListChanged()):
@@ -247,39 +261,32 @@ def swap_backend():
     """
 
     from mcp.server import MCPServer  # type: ignore
-    from mcp.server.subscriptions import InMemorySubscriptionBus, PromptsListChanged, ResourcesListChanged, ToolsListChanged  # type: ignore
 
-    bus = InMemorySubscriptionBus()
+    bus = _subscription_bus()
     base_app = MCPServer("proxy", subscriptions=bus)
 
-    async def notify():
-        for event in (ToolsListChanged(), ResourcesListChanged(), PromptsListChanged()):
-            await bus.publish(event)
-
-    return base_app, _swap_mount(base_app), notify
+    return base_app, _swap_mount(base_app), _notify_bus(bus)
 
 
 def pick_backend(app):
     """`app` is the load error when the very first load failed — then the environment is all we have to go on."""
     try:
         from mcp.server import MCPServer  # type: ignore
-    except ImportError:  # mcp 1.x
-        try:
-            return proxy_backend()
-        except ImportError:  # no usable fastmcp proxy — swap the registries in place instead, which only works because 1.x keeps them in the same slots 2.x does
-            from mcp.server.fastmcp import FastMCP
 
-            if not isinstance(app, FastMCP | Exception):  # a standalone-fastmcp target keeps its own manager classes, and the SDK's handlers cannot read them
-                raise ImportError(
-                    f"mcp-hmr cannot serve a {type(app).__name__} target without a fastmcp new enough to proxy with. Upgrade `fastmcp`, or use the SDK's own `mcp.server.fastmcp.FastMCP`."
-                ) from None
-            return swap_backend_1x()
-    if not isinstance(app, MCPServer):  # a load error lands here too: the proxy speaks MCP, so it hosts either target type, while `swap_backend` only understands `MCPServer` registries
-        try:  # on mcp 2.x a FastMCP target still exists (fastmcp 4 runs on it) and must go through the proxy
-            return proxy_backend()
-        except ImportError:  # no fastmcp to proxy with — still hand back a server, so the client can connect and pick up the fix
-            pass
-    return swap_backend()
+        if isinstance(app, MCPServer):  # `MCPServer` has no mount or proxy of its own, so the swap is the only thing that fits it
+            return swap_backend()
+        swap, sdk_server = swap_backend, MCPServer
+    except ImportError:  # mcp 1.x, whose registries live in the same slots 2.x keeps them in
+        from mcp.server.fastmcp import FastMCP
+
+        swap, sdk_server = swap_backend_1x, FastMCP
+
+    try:  # a load error lands here too — the proxy speaks MCP, so it hosts whichever target type turns up once the module is fixed
+        return proxy_backend()
+    except ImportError:  # the swap reads the SDK's own registries, so it cannot stand in for the proxy on anything else
+        if not isinstance(app, sdk_server | Exception):
+            raise ImportError(f"mcp-hmr cannot serve a {type(app).__name__} target without a fastmcp new enough to proxy with. Upgrade `fastmcp`, or use the SDK's own server class.") from None
+        return swap()
 
 
 def mcp_server(target: str):
@@ -405,12 +412,12 @@ def _supported(runner, kwargs: dict):
     return {k: v for k, v in kwargs.items() if k in params}
 
 
-def _mcpserver_kwargs(runner, kwargs: dict, path_key: str):
-    """MCPServer's runners name the route path per transport, and take no middleware."""
+def _sdk_kwargs(runner, kwargs: dict, path_key: str):
+    """The SDK's own runners name the route path per transport, and take no middleware."""
     if path := kwargs.get("path"):
         kwargs = kwargs | {path_key: path}
     if kwargs.get("middleware"):
-        print("mcp-hmr: CORS is unavailable on mcp 2.x — MCPServer's runners take no middleware", file=sys.stderr)
+        print("mcp-hmr: CORS is unavailable without fastmcp — the SDK's own runners take no middleware", file=sys.stderr)
     return _supported(runner, kwargs)
 
 
@@ -428,29 +435,21 @@ def _apply_settings(mcp, kwargs: dict):
     for key, value in settings.items():
         if value is not None:
             setattr(mcp.settings, key, value)
-    if kwargs.get("middleware"):
-        print("mcp-hmr: CORS is unavailable without fastmcp — mcp 1.x's own runners take no middleware", file=sys.stderr)
 
 
 async def run_with_hmr(target: str, log_level: str | None = None, transport="stdio", **kwargs):
     async with mcp_server(target) as mcp:
-        if not hasattr(mcp, "run_async"):  # not a fastmcp server: either an `MCPServer`, or mcp 1.x's own `FastMCP` — neither takes `log_level`
-            if hasattr(mcp, "_mcp_server"):  # mcp 1.x's `FastMCP`, whose runners take no arguments at all — `MCPServer` names its inner server `_lowlevel_server`
-                _apply_settings(mcp, kwargs | {"log_level": log_level})
-                match transport:
-                    case "stdio":
-                        return await mcp.run_stdio_async()
-                    case "sse":
-                        return await mcp.run_sse_async()
-                    case _:
-                        return await mcp.run_streamable_http_async()
+        if not hasattr(mcp, "run_async"):  # one of the SDK's own servers — its runners take no `log_level`, and mcp 1.x's take nothing at all
+            kwargs |= {"log_level": log_level}
+            if hasattr(mcp, "_mcp_server"):  # mcp 1.x's `FastMCP` reads host, port and paths off `settings` instead of from its runners — `MCPServer` names its inner server `_lowlevel_server`
+                _apply_settings(mcp, kwargs)
             match transport:
                 case "stdio":
-                    return await mcp.run_stdio_async()
+                    return await mcp.run_stdio_async(**_sdk_kwargs(mcp.run_stdio_async, kwargs, ""))
                 case "sse":
-                    return await mcp.run_sse_async(**_mcpserver_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
+                    return await mcp.run_sse_async(**_sdk_kwargs(mcp.run_sse_async, kwargs, "sse_path"))
                 case _:
-                    return await mcp.run_streamable_http_async(**_mcpserver_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
+                    return await mcp.run_streamable_http_async(**_sdk_kwargs(mcp.run_streamable_http_async, kwargs, "streamable_http_path"))
         kwargs |= {"log_level": log_level}
         match transport:
             case "stdio":
