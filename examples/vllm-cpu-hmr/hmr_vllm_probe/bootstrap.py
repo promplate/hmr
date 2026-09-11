@@ -1,7 +1,6 @@
 """Ambient pyth-on-line finder, watcher, and request-boundary publisher."""
 
 # This disposable integration deliberately reports candidate errors verbatim.
-# ruff: noqa: BLE001, S102
 # pyright: reportMissingImports=false, reportArgumentType=false, reportIndexIssue=false
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ _INSTALLED = False
 _STATE_LOCK = threading.RLock()
 _SYNC_LOCK = threading.RLock()
 _PENDING: dict[Path, dict[str, Any]] = {}
-_FINDER = None
 _SOURCE_ROOT: Path | None = None
 _AUTO_PATTERNS: list[str] = []
 _LAZY_PATTERNS: list[str] = []
@@ -32,6 +30,7 @@ _MANIFEST: dict[str, Any] | None = None
 _MANIFEST_PATHS: set[str] = set()
 _WATCH_STOP = threading.Event()
 _WATCH_THREAD: threading.Thread | None = None
+_STATUS_DUMP_LOCK = threading.Lock()
 
 
 def _relative(path: Path) -> str:
@@ -50,7 +49,7 @@ def _stop_watcher() -> None:
 
 
 def install_from_env() -> None:
-    global _INSTALLED, _FINDER, _SOURCE_ROOT, _AUTO_PATTERNS, _LAZY_PATTERNS, _FORCED_DEPENDENTS
+    global _INSTALLED, _SOURCE_ROOT, _AUTO_PATTERNS, _LAZY_PATTERNS, _FORCED_DEPENDENTS
     global _MANIFEST, _MANIFEST_PATHS, _WATCH_THREAD
     with _INSTALL_LOCK:
         if _INSTALLED:
@@ -79,7 +78,7 @@ def install_from_env() -> None:
 
         from reactivity.hmr.core import patch_meta_path
 
-        _FINDER = patch_meta_path(includes=include_paths)
+        patch_meta_path(includes=include_paths)
         telemetry.install_profiler()
         telemetry.event(
             "hmr_installed",
@@ -250,7 +249,8 @@ def state() -> dict[str, Any]:
 def _dump_status() -> None:
     root = os.getenv("HMR_VLLM_STATUS_DIR")
     if root:
-        target = Path(root) / f"{os.getpid()}.json"
-        temp = target.with_suffix(".tmp")
-        temp.write_text(json.dumps(state(), sort_keys=True), encoding="utf-8")
-        temp.replace(target)
+        with _STATUS_DUMP_LOCK:
+            target = Path(root) / f"{os.getpid()}.json"
+            temp = target.with_suffix(".tmp")
+            temp.write_text(json.dumps(state(), sort_keys=True), encoding="utf-8")
+            temp.replace(target)

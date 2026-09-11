@@ -38,3 +38,4 @@ class HMRBoundaryMiddleware:
             await self.app(scope, receive, send_with_marker)
         finally:
             telemetry.scope_exit()
+        return None

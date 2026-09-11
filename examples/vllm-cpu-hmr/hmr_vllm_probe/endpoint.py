@@ -25,7 +25,9 @@ class HMRProbeEndpointPlugin:
         async def hmr_sync(raw_request: Request, force: bool = False):
             engine = raw_request.app.state.hmr_probe_engine_client
             local = sync_pending(force=force)
-            workers = [] if engine is None else await engine.collective_rpc("hmr_probe_sync_pending", kwargs={"force": force})
+            workers = []
+            if engine is not None and not local.get("deferred", False):
+                workers = await engine.collective_rpc("hmr_probe_sync_pending", kwargs={"force": force})
             return {"api": local, "workers": workers}
 
     async def init_state(self, engine_client, state_obj, _args) -> None:

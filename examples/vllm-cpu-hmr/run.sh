@@ -15,7 +15,7 @@ fi
 mkdir -p "$RESULTS/process-state"
 # The official image runs the probe as root. Keep the bind-mounted receipt
 # directory reusable by the invoking user on the next run.
-chmod u+rwx,go+wx "$RESULTS" "$RESULTS/process-state"
+chmod u+rwx,go-rwx "$RESULTS" "$RESULTS/process-state"
 
 docker build --build-arg "PYTH_ON_LINE_SHA=$PYTH_ON_LINE_SHA" --tag "$IMAGE" --file examples/vllm-cpu-hmr/Dockerfile .
 IMAGE_ID="$(docker image inspect "$BASE_IMAGE" --format '{{.Id}}')"
