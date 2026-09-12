@@ -219,10 +219,12 @@ def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> 
     except SourceRootError as exc:
         raise UsageError(f"{exc}\nPass --hmr-disabled to launch vLLM without HMR.") from None
     if runtime == DEFAULT_RUNTIME:
-        from .runtime.scope import ScopeError, validate_source_root
+        from .runtime.scope import ScopeError, load_manifest, validate_source_root
 
         try:
             resolved = validate_source_root(resolved)  # only the packaged runtime owns this two-file scope
+            if manifest := env.get("HMR_VLLM_MANIFEST"):
+                load_manifest(Path(manifest), resolved)  # same reason as `check_runtime`: a manifest first read inside `sitecustomize` fails as one stderr line, i.e. as silently missing HMR
         except ScopeError as exc:
             raise UsageError(str(exc)) from None
     elif not resolved.is_dir():

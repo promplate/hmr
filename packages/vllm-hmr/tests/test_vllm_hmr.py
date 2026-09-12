@@ -249,6 +249,30 @@ class EnvironmentTests(SourceTreeTestCase):
             vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(partial)}, {}, serve=True)
         self.assertIn(scope.DEPENDENT_PATH, str(caught.exception))
 
+    def test_a_broken_manifest_is_a_usage_error_not_a_silently_disabled_launch(self):
+        """`site` reports a failing `sitecustomize` as one stderr line and starts vLLM anyway.
+
+        A manifest first read there therefore turns "bad manifest" into "server runs without HMR",
+        buried in vLLM's startup output. Same reason `check_runtime` preflights the runtime spec.
+        """
+        for name, text in (("malformed", "{not json"), ("shape", json.dumps(scope.build_manifest(self.source).as_dict() | {"files": [None]}))):
+            path = Path(self.tmp.name) / f"cli-{name}.json"
+            path.write_text(text, encoding="utf-8")
+            with self.subTest(manifest=name), self.assertRaises(vllm_hmr.UsageError):
+                vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_MANIFEST": str(path)}, {}, serve=True)
+
+    def test_a_valid_manifest_passes_the_cli_preflight_and_is_forwarded(self):
+        path = scope.write_manifest(scope.build_manifest(self.source), Path(self.tmp.name) / "cli-good.json")
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_MANIFEST": str(path)}, {}, serve=True)
+        self.assertEqual(env["HMR_VLLM_MANIFEST"], str(path))
+
+    def test_an_overridden_runtime_owns_its_own_manifest(self):
+        """Only the packaged runtime reads `HMR_VLLM_MANIFEST` through this scope, so only it is preflighted."""
+        path = Path(self.tmp.name) / "foreign.json"
+        path.write_text("{not our schema", encoding="utf-8")
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_MANIFEST": str(path), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
+        self.assertEqual(env["HMR_VLLM_MANIFEST"], str(path))
+
     def test_relative_source_root_is_absolutised(self):
         env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": os.path.relpath(self.source)}, {}, serve=True)
         self.assertEqual(env["HMR_VLLM_SOURCE_ROOT"], str(self.source.resolve()))
@@ -522,6 +546,57 @@ class ScopeTests(SourceTreeTestCase):
                 with self.assertRaises(scope.ScopeError) as caught:
                     scope.load_manifest(path, self.source.resolve())
                 self.assertIn(field, str(caught.exception))
+
+    def test_a_manifest_with_wrongly_shaped_fields_is_rejected(self):
+        """Wrong shape must be a `ScopeError` like every other bad manifest, not an `AttributeError`.
+
+        `files: [null]`, a non-list `reactive_paths`, or a `forced_dependents` value that is not a
+        list used to raise out of the loader's own unpacking. That reaches `sitecustomize` as a
+        crash rather than a rejected manifest, and reaches the CLI past its `ScopeError` handler.
+        """
+        cases = {
+            "files_null_entry": lambda raw: raw["files"].__setitem__(0, None),
+            "files_entry_is_a_string": lambda raw: raw["files"].__setitem__(0, scope.TARGET),
+            "files_entry_path_null": lambda raw: raw["files"][0].__setitem__("path", None),
+            "files_entry_sha_null": lambda raw: raw["files"][0].__setitem__("sha256", None),
+            "files_is_an_object": lambda raw: raw.__setitem__("files", {"path": scope.TARGET}),
+            "reactive_paths_is_a_string": lambda raw: raw.__setitem__("reactive_paths", scope.TARGET),
+            "reactive_paths_is_an_int": lambda raw: raw.__setitem__("reactive_paths", 2),
+            "auto_paths_null": lambda raw: raw.__setitem__("auto_paths", None),
+            "auto_paths_entry_null": lambda raw: raw.__setitem__("auto_paths", [None]),
+            "forced_dependents_is_a_list": lambda raw: raw.__setitem__("forced_dependents", []),
+            "forced_dependents_value_is_a_string": lambda raw: raw["forced_dependents"].__setitem__(scope.TARGET, scope.DEPENDENT),
+            "forced_dependents_value_null": lambda raw: raw["forced_dependents"].__setitem__(scope.TARGET, None),
+            "source_root_is_an_int": lambda raw: raw.__setitem__("source_root", 2),
+            "source_root_null": lambda raw: raw.__setitem__("source_root", None),
+        }
+        for name, mutate in cases.items():
+            raw = scope.build_manifest(self.source).as_dict()
+            mutate(raw)
+            path = Path(self.tmp.name) / f"shape-{name}.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.subTest(case=name), self.assertRaises(scope.ScopeError):
+                scope.load_manifest(path, self.source.resolve())
+
+    def test_a_manifest_that_is_not_a_json_object_is_rejected(self):
+        for name, text in (("list", "[]"), ("string", '"vllm"'), ("null", "null"), ("truncated", '{"schema_version": 1'), ("empty", "")):
+            path = Path(self.tmp.name) / f"not-an-object-{name}.json"
+            path.write_text(text, encoding="utf-8")
+            with self.subTest(body=name), self.assertRaises(scope.ScopeError):
+                scope.load_manifest(path, self.source.resolve())
+
+    def test_an_unreadable_manifest_or_source_file_is_a_scope_error(self):
+        with self.assertRaises(scope.ScopeError):
+            scope.load_manifest(Path(self.tmp.name) / "absent.json", self.source.resolve())
+        path = scope.write_manifest(scope.build_manifest(self.source), Path(self.tmp.name) / "m.json")
+        target = self.source / scope.TARGET
+        mode = target.stat().st_mode
+        target.chmod(0)
+        self.addCleanup(target.chmod, mode)
+        if os.access(target, os.R_OK):
+            self.skipTest("running as root, where chmod 0 does not make a file unreadable")
+        with self.assertRaises(scope.ScopeError):
+            scope.load_manifest(path, self.source.resolve())
 
     def test_unknown_schema_version_is_rejected(self):
         raw = scope.build_manifest(self.source).as_dict() | {"schema_version": 99}

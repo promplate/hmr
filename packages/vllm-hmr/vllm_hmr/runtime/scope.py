@@ -64,7 +64,10 @@ class Manifest:
 
 
 def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:  # `is_file()` passes for a file we cannot read; unhashable is as fatal as mismatched
+        raise ScopeError(f"cannot hash {path}: {type(exc).__name__}: {exc}") from exc
 
 
 def validate_source_root(root: Path) -> Path:
@@ -85,8 +88,50 @@ def build_manifest(root: Path) -> Manifest:
     return Manifest(source_root, files, REACTIVE_PATHS, (TARGET,), {TARGET: (DEPENDENT,)})
 
 
+def _read_manifest(path: Path) -> dict:
+    """Unreadable, non-JSON, and not-an-object are all "this manifest does not state a scope"."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ScopeError(f"cannot read manifest {path}: {type(exc).__name__}: {exc}") from exc
+    except ValueError as exc:  # JSONDecodeError, and a UnicodeError from the decode
+        raise ScopeError(f"manifest {path} is not valid JSON: {type(exc).__name__}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ScopeError(f"manifest {path} must be a JSON object, got {type(raw).__name__}")
+    return raw
+
+
+def _string_list(path: Path, field: str, value: object) -> tuple[str, ...]:
+    """A scope field is a list of strings or it is not a scope field.
+
+    A bare string would otherwise iterate into characters and a non-iterable would raise
+    `TypeError` out of the constructor, both of which reach the caller as something other
+    than `ScopeError` — i.e. as a crash rather than as a rejected manifest.
+    """
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ScopeError(f"manifest {path} field {field!r} must be a list of strings, got {value!r}")
+    return tuple(value)
+
+
+def _file_entries(path: Path, value: object) -> tuple[dict[str, str], ...]:
+    if not isinstance(value, list):
+        raise ScopeError(f"manifest {path} field 'files' must be a list of objects, got {type(value).__name__}")
+    entries = []
+    for item in value:
+        if not isinstance(item, dict) or not all(isinstance(item.get(key), str) for key in ("path", "sha256")):
+            raise ScopeError(f"manifest {path} field 'files' entries must be objects with string 'path' and 'sha256', got {item!r}")
+        entries.append({"path": item["path"], "sha256": item["sha256"]})
+    return tuple(entries)
+
+
+def _forced_dependents(path: Path, value: object) -> dict[str, tuple[str, ...]]:
+    if not isinstance(value, dict):
+        raise ScopeError(f"manifest {path} field 'forced_dependents' must be an object, got {type(value).__name__}")
+    return {key: _string_list(path, f"forced_dependents[{key!r}]", names) for key, names in value.items()}
+
+
 def load_manifest(path: Path, expected_root: Path | None = None) -> Manifest:
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw = _read_manifest(path)
     if raw.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ScopeError(f"manifest {path} has schema_version {raw.get('schema_version')!r}, expected {MANIFEST_SCHEMA_VERSION}")
     # No defaults: an absent field is a manifest that does not state the scope, and filling one in
@@ -94,16 +139,21 @@ def load_manifest(path: Path, expected_root: Path | None = None) -> Manifest:
     missing = sorted({"source_root", "files", "reactive_paths", "auto_paths", "forced_dependents"} - set(raw))
     if missing:
         raise ScopeError(f"manifest {path} is missing required fields: {', '.join(missing)}")
-    source_root = Path(raw["source_root"]).resolve()
+    if not isinstance(raw["source_root"], str):
+        raise ScopeError(f"manifest {path} field 'source_root' must be a string, got {type(raw['source_root']).__name__}")
+    try:
+        source_root = Path(raw["source_root"]).resolve()
+    except (OSError, ValueError) as exc:  # e.g. an embedded NUL, which `resolve()` rejects
+        raise ScopeError(f"manifest {path} has an unusable source_root {raw['source_root']!r}: {type(exc).__name__}: {exc}") from exc
     if expected_root is not None and source_root != expected_root:
         raise ScopeError(f"manifest source_root {source_root} != configured source root {expected_root}")
     validate_source_root(source_root)
     manifest = Manifest(
         source_root,
-        tuple({"path": item.get("path", ""), "sha256": item.get("sha256", "")} for item in raw["files"]),
-        tuple(raw["reactive_paths"]),
-        tuple(raw["auto_paths"]),
-        {key: tuple(value) for key, value in raw["forced_dependents"].items()},
+        _file_entries(path, raw["files"]),
+        _string_list(path, "reactive_paths", raw["reactive_paths"]),
+        _string_list(path, "auto_paths", raw["auto_paths"]),
+        _forced_dependents(path, raw["forced_dependents"]),
     )
     verify_manifest(manifest)
     return manifest
