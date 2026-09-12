@@ -13,8 +13,8 @@ import unittest
 from pathlib import Path
 
 import vllm_hmr
-from vllm_hmr import shim as vllm_hmr_shim
-from vllm_hmr import source as vllm_hmr_source
+import vllm_hmr.shim as vllm_hmr_shim
+import vllm_hmr.source as vllm_hmr_source
 from vllm_hmr.runtime import scope
 
 FAKE_VLLM = "/fake/bin/vllm"

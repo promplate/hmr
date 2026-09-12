@@ -13,6 +13,7 @@ which is why the whole scenario is a single test.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import sys
 import tempfile
 import time
@@ -21,13 +22,7 @@ from pathlib import Path
 
 from vllm_hmr.runtime import scope
 
-try:
-    import reactivity.hmr.core  # noqa: F401
-    import watchfiles  # noqa: F401
-except ImportError:  # pragma: no cover - exercised only in a stripped environment
-    RUNTIME_DEPS = False
-else:
-    RUNTIME_DEPS = True
+RUNTIME_DEPS = all(importlib.util.find_spec(name) is not None for name in ("reactivity", "watchfiles"))  # the runtime imports these lazily, so a stripped environment must skip rather than error
 
 PROVIDER = "def extract_prompt_components():\n    return {marker!r}\n"
 CONSUMER = "from vllm.renderers.inputs.preprocess import extract_prompt_components\n\n\ndef add_request():\n    return extract_prompt_components()\n"
