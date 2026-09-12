@@ -1,62 +1,34 @@
-"""Worker-side identity and publication RPCs for the CPU smoke."""
+"""One read-only model identity RPC, on top of the packaged worker extension.
 
-# ruff: noqa: FBT001, FBT002
+The smoke has to prove a source swap left the loaded model untouched, which needs
+`id(model)` and its parameter pointers. `vllm_hmr` deliberately reports none of
+that: the model is outside its verified scope. So this subclass adds exactly one
+read-only RPC and inherits the publication RPC the packaged middleware calls, which
+is what keeps `--worker-extension-cls` pointing at real product code.
+"""
 
-# pyright: reportMissingImports=false, reportAttributeAccessIssue=false
+# pyright: reportMissingImports=false
 
 from __future__ import annotations
 
-import os
-from typing import Any
+from itertools import islice
+from typing import TYPE_CHECKING, Any
+
+from vllm_hmr.runtime.worker import HMRWorkerExtension
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
-class HMRWorkerExtension:
-    """Mixed into vLLM's CPU worker for two disposable RPCs."""
+class HMRProbeWorkerExtension(HMRWorkerExtension):
+    get_model: Callable[[], Any]  # provided by the WorkerBase this class is mixed into, never by this class
 
-    def hmr_probe_sync_pending(self, force: bool = False) -> dict[str, Any]:
-        from .bootstrap import sync_pending
-
-        return sync_pending(force=force)
-
-    def hmr_probe_state(self) -> dict[str, Any]:
-        import torch
-
-        from .bootstrap import state
-        from .telemetry import snapshot
-
+    def hmr_probe_identity(self) -> dict[str, Any]:
         model = self.get_model()
-        params = []
-        for index, (name, value) in enumerate(model.named_parameters()):
-            if index == 16:
-                break
-            params.append(
-                {
-                    "name": name,
-                    "data_ptr": value.data_ptr(),
-                    "shape": list(value.shape),
-                    "dtype": str(value.dtype),
-                }
-            )
-        if torch.cuda.is_available():
-            memory = {
-                "kind": "cuda",
-                "allocated": torch.cuda.memory_allocated(),
-                "reserved": torch.cuda.memory_reserved(),
-            }
-        else:
-            memory = {
-                "kind": "cpu",
-                "rss_bytes": __import__("psutil").Process().memory_info().rss,
-            }
         return {
-            "pid": os.getpid(),
-            "rank": getattr(self, "rank", None),
-            "device": str(getattr(self, "device", None)),
+            **self.vllm_hmr_state(),
             "model_id": id(model),
             "model_class_id": id(type(model)),
             "model_class": f"{type(model).__module__}.{type(model).__qualname__}",
-            "parameter_sample": params,
-            "accelerator_memory": memory,
-            "hmr": state(),
-            "telemetry": snapshot(),
+            "parameter_sample": [{"name": name, "data_ptr": value.data_ptr(), "shape": list(value.shape), "dtype": str(value.dtype)} for name, value in islice(model.named_parameters(), 16)],
         }

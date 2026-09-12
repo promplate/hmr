@@ -1,3 +1,5 @@
+# ruff: noqa: E402  # `smoke.py` and `mutations.py` are runner scripts, not an installed package; sys.path must be set up first
+
 from __future__ import annotations
 
 import ast
@@ -49,19 +51,15 @@ class SmokeHelperTests(unittest.TestCase):
             "path": smoke.TARGET,
             "forced_dependents_reexecuted": [smoke.DEPENDENT],
         }
-        snapshot = {
-            "api": {
-                "telemetry": {
-                    "events": [
-                        {
-                            "kind": "request_boundary",
-                            "local_sync": {"published": [published]},
-                        }
-                    ]
-                }
-            }
+        boundary = {
+            "kind": "request_boundary",
+            "t": 2.0,
+            "local_sync": {"published": [published]},
         }
-        self.assertEqual(smoke.publication_for_target(snapshot), published)
+        queued = {"kind": "source_change", "t": 1.0, "path": smoke.TARGET}
+        snapshot = {"api": {"telemetry": {"events": [queued, boundary]}}}
+        self.assertEqual(smoke.publication_for_target(snapshot), (boundary, published))
+        self.assertEqual(smoke.queued_before(snapshot, boundary), queued)
 
 
 if __name__ == "__main__":
