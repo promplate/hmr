@@ -18,6 +18,7 @@ import vllm_hmr.source as vllm_hmr_source
 from vllm_hmr.runtime import scope
 
 FAKE_VLLM = "/fake/bin/vllm"
+OVERRIDE_RUNTIME = "vllm_hmr.shim:install_from_env"  # importable and callable, and not the packaged default: the wrapper preflights the spec, so a fictional one is a usage error
 
 
 def which_stub(name: str) -> str | None:
@@ -132,8 +133,8 @@ class EnvironmentTests(SourceTreeTestCase):
         self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0], str(vllm_hmr.SHIM_DIR))
 
     def test_explicit_runtime_overrides_the_default(self):
-        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": "probe:entry"}, {}, serve=True)
-        self.assertEqual(env["HMR_VLLM_RUNTIME"], "probe:entry")
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
+        self.assertEqual(env["HMR_VLLM_RUNTIME"], OVERRIDE_RUNTIME)
 
     def test_non_serve_subcommand_is_left_alone(self):
         env = vllm_hmr.build_env({}, {"PATH": "/usr/bin"}, serve=False)
@@ -143,6 +144,32 @@ class EnvironmentTests(SourceTreeTestCase):
         env = vllm_hmr.build_env({"HMR_VLLM_DISABLED": "1"}, {}, serve=True)
         self.assertNotIn("HMR_VLLM_ENABLE", env)
         self.assertNotIn("HMR_VLLM_RUNTIME", env)
+        self.assertNotIn("PYTHONPATH", env)
+
+    def test_disabled_removes_an_activation_the_environment_already_carried(self):
+        """`--hmr-disabled` has to undo an inherited activation, not just decline to add one.
+
+        A base environment that already went through this wrapper (`run.sh`, a nested launch, an
+        exported profile) arrives with `HMR_VLLM_ENABLE=1` and the shim on `PYTHONPATH`. Leaving
+        those in place meant the exec'd interpreter installed HMR despite the opt-out.
+        """
+        activated = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source)}, {}, serve=True)
+        env = vllm_hmr.build_env({"HMR_VLLM_DISABLED": "1"}, activated, serve=True)
+        self.assertNotIn("HMR_VLLM_ENABLE", env)
+        self.assertNotIn("PYTHONPATH", env)  # the shim was the only entry, and it was ours
+        self.assertEqual(env["HMR_VLLM_RUNTIME"], vllm_hmr.DEFAULT_RUNTIME)  # inert without the gate, and documented: not ours to delete
+
+    def test_deactivation_keeps_the_user_s_own_pythonpath_entries(self):
+        base = {"HMR_VLLM_ENABLE": "1", "PYTHONPATH": os.pathsep.join(["/mine/first", str(vllm_hmr.SHIM_DIR), "/mine/second"])}
+        env = vllm_hmr.build_env({"HMR_VLLM_DISABLED": "1"}, base, serve=True)
+        self.assertEqual(env["PYTHONPATH"], os.pathsep.join(["/mine/first", "/mine/second"]))
+        self.assertNotIn("HMR_VLLM_ENABLE", env)
+
+    def test_a_non_serve_subcommand_also_drops_an_inherited_activation(self):
+        """Every other subcommand is documented as untouched, which an inherited activation broke too."""
+        activated = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source)}, {}, serve=True)
+        env = vllm_hmr.build_env({}, activated, serve=False)
+        self.assertNotIn("HMR_VLLM_ENABLE", env)
         self.assertNotIn("PYTHONPATH", env)
 
     def test_any_non_empty_disabled_value_disables_both_halves_of_the_wrapper(self):
@@ -159,22 +186,45 @@ class EnvironmentTests(SourceTreeTestCase):
         self.assertEqual(env["HMR_VLLM_ENABLE"], "1")
 
     def test_a_malformed_runtime_spec_is_a_usage_error(self):
-        """`site` swallows exceptions from `sitecustomize`, so a bad spec has to fail in the wrapper."""
+        """`site` only prints a line when `sitecustomize` fails, so a bad spec has to fail in the wrapper."""
         with self.assertRaises(vllm_hmr.UsageError) as caught:
             vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": "pkg.mod"}, {}, serve=True)
         self.assertIn("module:callable", str(caught.exception))
+
+    def test_a_well_formed_but_unloadable_runtime_spec_is_a_usage_error(self):
+        """Parsing `module:callable` proves nothing about the spec resolving.
+
+        A `sitecustomize` that raises costs one stderr line inside vLLM's startup output and then
+        HMR is simply absent, so the wrapper resolves the spec itself: unimportable module, missing
+        attribute, and non-callable target are all rejected before `execve`.
+        """
+        for spec, expected in (
+            ("vllm_hmr_definitely_not_a_module:entry", "ModuleNotFoundError"),
+            ("vllm_hmr.shim:no_such_attribute", "AttributeError"),
+            ("vllm_hmr.shim:SKIP_MARKER", "not callable"),
+        ):
+            with self.subTest(spec=spec):
+                with self.assertRaises(vllm_hmr.UsageError) as caught:
+                    vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": spec}, {}, serve=True)
+                self.assertIn(expected, str(caught.exception))
+                self.assertIn(spec, str(caught.exception))
+
+    def test_the_packaged_default_runtime_passes_its_own_preflight(self):
+        """The preflight must not reject the default: it also proves the runtime's own imports resolve here."""
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source)}, {}, serve=True)
+        self.assertEqual(env["HMR_VLLM_RUNTIME"], vllm_hmr.DEFAULT_RUNTIME)
 
     def test_an_overridden_runtime_owns_its_own_scope(self):
         """The packaged two-file scope belongs to the packaged runtime, not to every runtime."""
         other = Path(self.tmp.name) / "own-scope"
         (other / "src").mkdir(parents=True)
-        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(other), "HMR_VLLM_RUNTIME": "probe:entry"}, {}, serve=True)
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(other), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
         self.assertEqual(env["HMR_VLLM_SOURCE_ROOT"], str(other.resolve()))
         self.assertEqual(env["HMR_VLLM_ENABLE"], "1")
 
     def test_an_overridden_runtime_still_needs_an_existing_source_root(self):
         with self.assertRaises(vllm_hmr.UsageError) as caught:
-            vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(Path(self.tmp.name) / "absent"), "HMR_VLLM_RUNTIME": "probe:entry"}, {}, serve=True)
+            vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(Path(self.tmp.name) / "absent"), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
         self.assertIn("does not exist", str(caught.exception))
 
     def test_site_packages_vllm_without_source_root_is_a_usage_error(self):
@@ -311,21 +361,12 @@ class ExecTests(SourceTreeTestCase):
         self.assertEqual(caught.exception.code, 0)
         self.assertIn("Not implemented", out.getvalue())  # the capability boundary must stay in --help
 
-    def test_example_probe_argv_keeps_its_own_extensions(self):
-        """`examples/vllm-cpu-hmr` brings its own runtime, middleware, and worker extension; ours must stay out."""
-        vllm_argv = [
-            "serve",
-            "facebook/opt-125m",
-            "--enforce-eager",
-            "--worker-extension-cls",
-            "hmr_vllm_probe.worker.HMRWorkerExtension",
-            "--middleware",
-            "hmr_vllm_probe.middleware.HMRBoundaryMiddleware",
-        ]
-        hmr_argv = ["--hmr-source-root", str(self.source), "--hmr-runtime", "hmr_vllm_probe.bootstrap:install_unless_registry_inspector"]
-        _, argv, env, _ = vllm_hmr.build_exec([*hmr_argv, *vllm_argv], {}, which=which_stub)
-        self.assertEqual(argv[1:], vllm_argv)
-        self.assertEqual(env["HMR_VLLM_RUNTIME"], "hmr_vllm_probe.bootstrap:install_unless_registry_inspector")
+    def test_example_probe_argv_keeps_its_own_worker_extension(self):
+        """`examples/vllm-cpu-hmr` brings only a worker extension; the packaged runtime and middleware are what it tests."""
+        vllm_argv = ["serve", "facebook/opt-125m", "--enforce-eager", "--worker-extension-cls", "hmr_vllm_probe.worker.HMRProbeWorkerExtension"]
+        _, argv, env, _ = vllm_hmr.build_exec(["--hmr-source-root", str(self.source), *vllm_argv], {}, which=which_stub)
+        self.assertEqual(argv[1:], [*vllm_argv, "--middleware", vllm_hmr.MIDDLEWARE])  # the CLI must still supply the middleware it owns
+        self.assertEqual(env["HMR_VLLM_RUNTIME"], vllm_hmr.DEFAULT_RUNTIME)
 
     def test_print_env_reports_exec_argv_without_execing(self):
         out = io.StringIO()
@@ -440,6 +481,48 @@ class ScopeTests(SourceTreeTestCase):
             scope.load_manifest(path, self.source.resolve())
         self.assertIn("verified scope", str(caught.exception))
 
+    def test_manifest_cannot_narrow_the_scope_either(self):
+        """The scope is fixed, so a manifest that omits part of it is as wrong as one that adds to it.
+
+        Rejecting only additions accepted a manifest that watches nothing (`files: []`), one that
+        never re-executes the dependent (`reactive_paths` without it), and one that publishes
+        nothing (`auto_paths: []`). Each installs a runtime that looks healthy and serves stale
+        code, which is worse than a startup error.
+        """
+        cases = {
+            "files": lambda raw: raw.__setitem__("files", []),
+            "reactive_paths": lambda raw: raw.__setitem__("reactive_paths", [scope.TARGET]),
+            "auto_paths": lambda raw: raw.__setitem__("auto_paths", []),
+            "forced_dependents": lambda raw: raw.__setitem__("forced_dependents", {}),
+            "duplicate_files": lambda raw: raw["files"].append(raw["files"][0]),
+        }
+        for name, mutate in cases.items():
+            raw = scope.build_manifest(self.source).as_dict()
+            mutate(raw)
+            path = Path(self.tmp.name) / f"narrow-{name}.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.subTest(field=name):
+                with self.assertRaises(scope.ScopeError) as caught:
+                    scope.load_manifest(path, self.source.resolve())
+                self.assertIn("verified scope", str(caught.exception))
+
+    def test_a_manifest_missing_required_fields_is_rejected(self):
+        """An absent field is not a default: it is a manifest that never stated the scope."""
+        for name, raw in (("empty", {}), ("schema-only", {"schema_version": scope.MANIFEST_SCHEMA_VERSION})):
+            path = Path(self.tmp.name) / f"{name}.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.subTest(manifest=name), self.assertRaises(scope.ScopeError):
+                scope.load_manifest(path, self.source.resolve())
+        for field in ("source_root", "files", "reactive_paths", "auto_paths", "forced_dependents"):
+            raw = scope.build_manifest(self.source).as_dict()
+            del raw[field]
+            path = Path(self.tmp.name) / f"without-{field}.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            with self.subTest(missing=field):
+                with self.assertRaises(scope.ScopeError) as caught:
+                    scope.load_manifest(path, self.source.resolve())
+                self.assertIn(field, str(caught.exception))
+
     def test_unknown_schema_version_is_rejected(self):
         raw = scope.build_manifest(self.source).as_dict() | {"schema_version": 99}
         path = Path(self.tmp.name) / "v99.json"
@@ -462,6 +545,25 @@ class ShimTests(unittest.TestCase):
         for bad in ("pkg.mod", ":entry", "pkg.mod:", ""):
             with self.assertRaises(ValueError):
                 vllm_hmr_shim.parse_runtime(bad)
+
+    def test_check_runtime_resolves_the_spec_without_calling_it(self):
+        calls: list[int] = []
+        module = types.ModuleType("vllm_hmr_preflight_probe")
+        module.entry = lambda: calls.append(1)  # pyright: ignore[reportAttributeAccessIssue]
+        module.not_callable = 42  # pyright: ignore[reportAttributeAccessIssue]
+        sys.modules["vllm_hmr_preflight_probe"] = module
+        self.addCleanup(lambda: sys.modules.pop("vllm_hmr_preflight_probe", None))
+        self.assertIsNone(vllm_hmr_shim.check_runtime("vllm_hmr_preflight_probe:entry"))
+        self.assertEqual(calls, [])  # a preflight that ran the runtime would install HMR in the wrapper, which is then replaced by `execve`
+        for spec in ("vllm_hmr_preflight_probe:absent", "vllm_hmr_preflight_probe:not_callable", "vllm_hmr_no_such_module:entry", "not-a-spec"):
+            with self.subTest(spec=spec), self.assertRaises(ValueError):
+                vllm_hmr_shim.check_runtime(spec)
+
+    def test_load_runtime_rejects_a_non_callable_target(self):
+        """`sitecustomize` would raise `TypeError` on the call, one line into vLLM's output; this is the same rejection, earlier."""
+        with self.assertRaises(ValueError) as caught:
+            vllm_hmr_shim.load_runtime("vllm_hmr.shim:SKIP_MARKER")
+        self.assertIn("not callable", str(caught.exception))
 
     def test_should_install_requires_enable_and_runtime_and_no_skip(self):
         self.assertTrue(vllm_hmr_shim.should_install({"HMR_VLLM_ENABLE": "1", "HMR_VLLM_RUNTIME": "m:e"}))

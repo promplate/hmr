@@ -49,6 +49,19 @@ class Manifest:
     def path_for(self, relative: str) -> Path:
         return self.source_root / relative
 
+    def declared_scope(self) -> dict[str, object]:
+        """Everything that decides what is watched, published, and re-executed; hashes are checked separately.
+
+        Sorted, so manifest field order is not scope, and duplicates survive into the comparison
+        rather than collapsing into a set that would accept a file listed twice.
+        """
+        return {
+            "files": sorted(item.get("path", "") for item in self.files),
+            "reactive_paths": sorted(self.reactive_paths),
+            "auto_paths": sorted(self.auto_paths),
+            "forced_dependents": {key: sorted(value) for key, value in self.forced_dependents.items()},
+        }
+
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -76,36 +89,46 @@ def load_manifest(path: Path, expected_root: Path | None = None) -> Manifest:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ScopeError(f"manifest {path} has schema_version {raw.get('schema_version')!r}, expected {MANIFEST_SCHEMA_VERSION}")
+    # No defaults: an absent field is a manifest that does not state the scope, and filling one in
+    # would be this loader inventing the scope the manifest exists to pin down.
+    missing = sorted({"source_root", "files", "reactive_paths", "auto_paths", "forced_dependents"} - set(raw))
+    if missing:
+        raise ScopeError(f"manifest {path} is missing required fields: {', '.join(missing)}")
     source_root = Path(raw["source_root"]).resolve()
     if expected_root is not None and source_root != expected_root:
         raise ScopeError(f"manifest source_root {source_root} != configured source root {expected_root}")
     validate_source_root(source_root)
     manifest = Manifest(
         source_root,
-        tuple({"path": item["path"], "sha256": item["sha256"]} for item in raw["files"]),
+        tuple({"path": item.get("path", ""), "sha256": item.get("sha256", "")} for item in raw["files"]),
         tuple(raw["reactive_paths"]),
-        tuple(raw.get("auto_paths", (TARGET,))),
-        {key: tuple(value) for key, value in raw.get("forced_dependents", {}).items()},
+        tuple(raw["auto_paths"]),
+        {key: tuple(value) for key, value in raw["forced_dependents"].items()},
     )
     verify_manifest(manifest)
     return manifest
 
 
 def verify_manifest(manifest: Manifest) -> None:
-    """Recorded hashes must still match, so a stale manifest fails before anything is watched."""
+    """The scope is fixed, so a manifest must name it exactly, and its hashes must still match.
+
+    Exactly, not "within": rejecting only additions let a manifest narrow the scope silently. An
+    empty `files`, a `reactive_paths` without the dependent, or an `auto_paths` without the target
+    all passed while installing a watcher that publishes nothing, or one that swaps the provider
+    and leaves its consumer holding the old function object. Both are indistinguishable from
+    working HMR until a request runs stale code.
+
+    `build_manifest` is the one statement of that scope, so the comparison is against what it
+    would produce for this same root rather than against a second copy of the constants.
+    """
+    expected = build_manifest(manifest.source_root).declared_scope()
+    if manifest.declared_scope() != expected:
+        raise ScopeError(f"manifest does not match this runtime's verified scope exactly: {manifest.declared_scope()} != {expected}")
     for item in manifest.files:
         path = manifest.path_for(item["path"])
         digest = sha256(path)
         if digest != item["sha256"]:
             raise ScopeError(f"manifest hash mismatch for {item['path']}: on disk {digest}, manifest {item['sha256']}")
-    # `auto_paths` and `forced_dependents` drive publication and re-execution, so checking
-    # only `reactive_paths` would leave the scope widenable through the other two fields.
-    unsupported = sorted({*manifest.reactive_paths, *manifest.auto_paths, *manifest.forced_dependents} - set(REACTIVE_PATHS))
-    if unsupported:
-        raise ScopeError(f"manifest asks to watch paths outside this runtime's verified scope: {', '.join(unsupported)}")
-    unknown_dependents = sorted({name for names in manifest.forced_dependents.values() for name in names} - {DEPENDENT})
-    if unknown_dependents:
-        raise ScopeError(f"manifest asks to re-execute modules outside this runtime's verified scope: {', '.join(unknown_dependents)}")
 
 
 def write_manifest(manifest: Manifest, path: Path) -> Path:

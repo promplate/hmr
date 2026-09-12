@@ -17,13 +17,27 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 UV = shutil.which("uv")
+DROPPED_VARS = frozenset({"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP"})
+OVERRIDE_RUNTIME = "vllm_hmr.shim:install_from_env"  # a real importable callable that is not the default runtime: the wrapper now preflights the spec, so a fictional one is a usage error
+
+
+def clean_env(**overrides: str) -> dict[str, str]:
+    """The ambient environment minus everything that would let these tests measure the wrong code.
+
+    An inherited `PYTHONPATH` precedes the venv's `site-packages`, so this checkout would shadow
+    the wheel and a packaging test would silently pass on source it cannot vouch for. An inherited
+    `HMR_VLLM_*` (`HMR_VLLM_DISABLED=1` above all) reconfigures the very CLI under test. Everything
+    else survives, because `uv` and the console script need `PATH`, `HOME`, and friends.
+    """
+    return {key: value for key, value in os.environ.items() if key not in DROPPED_VARS and not key.startswith("HMR_VLLM_")} | overrides
 
 
 def run(*argv: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, capture_output=True, text=True, timeout=300, env=env, check=False)
+    return subprocess.run(argv, capture_output=True, text=True, timeout=300, env=clean_env() if env is None else env, check=False)
 
 
 @unittest.skipIf(UV is None, "requires `uv` to build the wheel and provision an interpreter")
@@ -104,19 +118,18 @@ class WheelInstallTests(unittest.TestCase):
     def test_missing_vllm_is_reported_not_traced(self):
         empty = Path(self.tmp.name) / "empty-path"
         empty.mkdir(exist_ok=True)
-        env = {**os.environ, "PATH": str(empty)}
-        done = run(str(self.script), "serve", "m", env=env)
+        done = run(str(self.script), "serve", "m", env=clean_env(PATH=str(empty)))
         self.assertEqual(done.returncode, 2)
         self.assertIn("`vllm` was not found on PATH", done.stderr)
         self.assertNotIn("Traceback", done.stderr)
 
     def test_print_env_points_at_the_shim_inside_the_wheel(self):
         stub_dir = self.stub_vllm_dir("#!/bin/sh\nexit 0\n")
-        env = {**os.environ, "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}"}
-        done = run(str(self.script), "--hmr-print-env", "--hmr-source-root", str(self.source_tree()), "--hmr-runtime", "pkg.mod:entry", "serve", "m", env=env)
+        env = clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+        done = run(str(self.script), "--hmr-print-env", "--hmr-source-root", str(self.source_tree()), "--hmr-runtime", OVERRIDE_RUNTIME, "serve", "m", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("HMR_VLLM_ENABLE=1", done.stdout)
-        self.assertIn("HMR_VLLM_RUNTIME=pkg.mod:entry", done.stdout)
+        self.assertIn(f"HMR_VLLM_RUNTIME={OVERRIDE_RUNTIME}", done.stdout)
         # The shim must resolve inside the installed package, never back to this source checkout.
         shim = self.site_packages / "vllm_hmr" / "_sitecustomize"
         self.assertTrue((shim / "sitecustomize.py").is_file(), f"wheel did not ship {shim}/sitecustomize.py")
@@ -136,12 +149,7 @@ class WheelInstallTests(unittest.TestCase):
         )
         # Stand in for vLLM's entrypoint: any interpreter start is enough to prove `site` loaded our shim.
         stub_dir = self.stub_vllm_dir(f'#!/bin/sh\nexec "{self.python}" -c "print(\'vllm-started\')"\n')
-        env = {
-            **os.environ,
-            "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
-            "PYTHONPATH": str(runtime_dir),
-            "PROBE_SENTINEL": str(sentinel),
-        }
+        env = clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}", PYTHONPATH=str(runtime_dir), PROBE_SENTINEL=str(sentinel))
         done = run(str(self.script), "--hmr-source-root", str(self.source_tree()), "--hmr-runtime", "probe_runtime:entry", "serve", "m", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("vllm-started", done.stdout)
@@ -150,8 +158,7 @@ class WheelInstallTests(unittest.TestCase):
     def test_default_serve_injects_the_packaged_runtime_and_vllm_flags(self):
         """`vllm-hmr serve MODEL` with no HMR option must still arrive fully wired."""
         stub_dir = self.stub_vllm_dir('#!/bin/sh\necho "argv: $@"\nexit 0\n')
-        env = {k: v for k, v in os.environ.items() if not k.startswith("HMR_VLLM_")}
-        env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
+        env = clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
         done = run(str(self.script), "--hmr-print-env", "--hmr-source-root", str(self.source_tree()), "serve", "facebook/opt-125m", "--port", "8000", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("HMR_VLLM_RUNTIME=vllm_hmr.runtime.bootstrap:install_unless_registry_inspector", done.stdout)
@@ -174,9 +181,7 @@ class WheelInstallTests(unittest.TestCase):
 
     def test_site_packages_install_without_source_root_fails_with_guidance(self):
         stub_dir = self.stub_vllm_dir("#!/bin/sh\nexit 0\n")
-        env = {k: v for k, v in os.environ.items() if not k.startswith("HMR_VLLM_")}
-        env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
-        done = run(str(self.script), "serve", "m", env=env)
+        done = run(str(self.script), "serve", "m", env=clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}"))
         self.assertEqual(done.returncode, 2)
         self.assertIn("--hmr-source-root", done.stderr)
         self.assertIn("--hmr-disabled", done.stderr)
@@ -193,13 +198,7 @@ class WheelInstallTests(unittest.TestCase):
             encoding="utf-8",
         )
         stub_dir = self.stub_vllm_dir(f'#!/bin/sh\nexec "{self.python}" -c "print(\'vllm-started\')"\n')
-        env = {
-            **os.environ,
-            "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
-            "PYTHONPATH": str(runtime_dir),
-            "PROBE_SENTINEL": str(sentinel),
-            "HMR_VLLM_SKIP": "1",
-        }
+        env = clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}", PYTHONPATH=str(runtime_dir), PROBE_SENTINEL=str(sentinel), HMR_VLLM_SKIP="1")
         done = run(str(self.script), "--hmr-source-root", str(self.source_tree()), "--hmr-runtime", "probe_runtime_skip:entry", "serve", "m", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("vllm-started", done.stdout)
@@ -214,25 +213,70 @@ class WheelInstallTests(unittest.TestCase):
     def test_disabled_launch_does_not_inject(self):
         """`--hmr-disabled` is the documented opt-out: no shim on PYTHONPATH, no HMR_VLLM_* exported, no vLLM flags added."""
         stub_dir = self.report_env_stub_dir()
-        env = {k: v for k, v in os.environ.items() if not k.startswith("HMR_VLLM_")}
-        env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
-        env.pop("PYTHONPATH", None)
-        done = run(str(self.script), "--hmr-disabled", "serve", "m", env=env)
+        done = run(str(self.script), "--hmr-disabled", "serve", "m", env=clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}"))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("argv: serve m\n", done.stdout)
         self.assertIn("<unset>", done.stdout)
         self.assertIn("[]", done.stdout)
 
+    def test_disabled_launch_strips_an_inherited_activation(self):
+        """An environment that already carries our activation must still get a plain `vllm`.
+
+        `run.sh`, a nested launch, or a shell that exported these once all reach the wrapper with
+        `HMR_VLLM_ENABLE=1` and the shim already on `PYTHONPATH`. Popping only `HMR_VLLM_DISABLED`
+        left both in place, so the exec'd interpreter installed HMR anyway: the opt-out opted out
+        of nothing. The user's own `PYTHONPATH` entries are not ours to drop, so they survive.
+        """
+        stub_dir = self.report_env_stub_dir()
+        mine = str(Path(self.tmp.name) / "my-own-pythonpath")
+        shim = self.site_packages / "vllm_hmr" / "_sitecustomize"
+        env = clean_env(
+            PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
+            PYTHONPATH=f"{shim}{os.pathsep}{mine}",
+            HMR_VLLM_ENABLE="1",
+            HMR_VLLM_RUNTIME=OVERRIDE_RUNTIME,
+        )
+        done = run(str(self.script), "--hmr-disabled", "serve", "m", env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("argv: serve m\n", done.stdout)
+        self.assertIn(f"{mine}\n", done.stdout)  # kept: we only remove what we injected
+        self.assertNotIn(str(shim), done.stdout)
+        self.assertNotIn("HMR_VLLM_ENABLE", done.stdout)  # the gate `sitecustomize` checks is gone, and so is the shim that would check it
+        self.assertIn("HMR_VLLM_RUNTIME", done.stdout)  # a documented user variable, inert without the gate: not ours to delete
+
     def test_non_serve_subcommand_is_untouched(self):
         stub_dir = self.report_env_stub_dir()
-        env = {k: v for k, v in os.environ.items() if not k.startswith("HMR_VLLM_")}
-        env["PATH"] = f"{stub_dir}{os.pathsep}{env['PATH']}"
-        env.pop("PYTHONPATH", None)
-        done = run(str(self.script), "chat", "--url", "http://localhost:8000", env=env)
+        done = run(str(self.script), "chat", "--url", "http://localhost:8000", env=clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}"))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("argv: chat --url http://localhost:8000\n", done.stdout)
         self.assertIn("<unset>", done.stdout)
         self.assertIn("[]", done.stdout)
+
+    def test_subprocesses_here_import_the_wheel_not_this_checkout(self):
+        """The guard that makes every other test in this class mean what it says.
+
+        With an inherited `PYTHONPATH`, this checkout precedes the venv's `site-packages`, so the
+        console script and these probes would exercise source code while claiming to exercise the
+        installed wheel. `run` therefore drops it, and this asserts the outcome directly.
+        """
+        done = run(str(self.python), "-c", "import vllm_hmr; print(vllm_hmr.__file__)")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), str(self.site_packages / "vllm_hmr" / "__init__.py"))
+
+
+class CleanEnvTests(unittest.TestCase):
+    """`clean_env` is what keeps the wheel tests honest, so it is tested without building a wheel."""
+
+    def test_interpreter_and_hmr_variables_are_dropped_and_the_rest_survives(self):
+        ambient = {"PATH": "/usr/bin", "HOME": "/home/x", "PYTHONPATH": "/src", "PYTHONHOME": "/py", "HMR_VLLM_DISABLED": "1", "HMR_VLLM_SOURCE_ROOT": "/elsewhere"}
+        with mock.patch.dict(os.environ, ambient, clear=True):
+            env = clean_env()
+        self.assertEqual(env, {"PATH": "/usr/bin", "HOME": "/home/x"})
+
+    def test_overrides_win_including_a_deliberate_pythonpath(self):
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin", "PYTHONPATH": "/src"}, clear=True):
+            env = clean_env(PYTHONPATH="/runtime", HMR_VLLM_SKIP="1")
+        self.assertEqual(env, {"PATH": "/usr/bin", "PYTHONPATH": "/runtime", "HMR_VLLM_SKIP": "1"})
 
 
 if __name__ == "__main__":

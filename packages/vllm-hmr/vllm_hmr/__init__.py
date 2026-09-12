@@ -53,13 +53,16 @@ HMR options (each also settable as an environment variable):
   --hmr-manifest PATH      HMR_VLLM_MANIFEST      JSON manifest of watched files
   --hmr-runtime SPEC       HMR_VLLM_RUNTIME       override the default runtime entrypoint
   --hmr-disabled           HMR_VLLM_DISABLED      plain `vllm` launch, no injection (any non-empty value)
+                                                  also strips an activation already in the environment
   --hmr-print-env          print the computed environment and exec argv, then exit
 
 Scope: with the packaged runtime, only `vllm/renderers/inputs/preprocess.py` and
 its direct dependent `vllm/v1/engine/async_llm.py` are reloadable, and the source
-root is checked for both. A `--hmr-runtime` override owns its own scope, so only
-the source root's existence is checked. Evidence covers vLLM 0.28.0+cpu on the
-official CPU image, single process, one request path.
+root is checked for both. A `--hmr-manifest` must name exactly that set, neither
+wider nor narrower. A `--hmr-runtime` override owns its own scope, so only the
+source root's existence is checked, but the spec itself must resolve to a callable
+here or the launch fails. Evidence covers vLLM 0.28.0+cpu on the official CPU
+image, single process, one request path.
 
 Not implemented: model weight, compiled kernel, CUDA graph, scheduler, and
 config hot replacement; multi-rank atomic publication. See README.md.
@@ -166,6 +169,29 @@ def inject_vllm_flags(forwarded: list[str]) -> list[str]:
     return [*head, *extra, *tail]
 
 
+def deactivate(env: dict[str, str]) -> dict[str, str]:
+    """Undo an activation this wrapper may have inherited, and nothing else.
+
+    An environment that already went through `build_env` once — `run.sh`, a nested launch, an
+    exported shell profile — arrives carrying `HMR_VLLM_ENABLE=1` and our shim on `PYTHONPATH`.
+    Dropping only `HMR_VLLM_DISABLED` then left both in place, so `--hmr-disabled` and every
+    non-`serve` subcommand still installed HMR in the exec'd interpreter.
+
+    Only the two things we inject are removed: the gate `sitecustomize` reads, and our own
+    `PYTHONPATH` entry. The user's other entries stay, and so do the documented `HMR_VLLM_*`
+    knobs, which are inert without the gate.
+    """
+    env.pop("HMR_VLLM_ENABLE", None)
+    if "PYTHONPATH" in env:
+        # Exact-match filtering, so a user entry that merely contains our path is untouched. An
+        # empty result means the shim was the only entry, i.e. we put it there: drop the variable.
+        remaining = os.pathsep.join(entry for entry in env["PYTHONPATH"].split(os.pathsep) if entry != str(SHIM_DIR))
+        env["PYTHONPATH"] = remaining
+        if not remaining:
+            del env["PYTHONPATH"]
+    return env
+
+
 def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> dict[str, str]:
     """Compute the exec environment. CLI options win over inherited variables.
 
@@ -178,12 +204,12 @@ def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> 
     env.pop("HMR_VLLM_DISABLED", None)
     if is_disabled(options, base) or not serve:
         # Opting out means the child sees a plain environment, not one carrying our marker.
-        return env
+        return deactivate(env)
     runtime = env.setdefault("HMR_VLLM_RUNTIME", DEFAULT_RUNTIME)
-    from .shim import parse_runtime
+    from .shim import check_runtime
 
     try:
-        parse_runtime(runtime)  # `site` swallows exceptions from `sitecustomize`, so a typo has to fail here or it silently disables HMR
+        check_runtime(runtime)  # `site` only prints a line when `sitecustomize` fails, so an unloadable spec has to fail here or it silently disables HMR
     except ValueError as exc:
         raise UsageError(str(exc)) from None
     from .source import SourceRootError, resolve_source_root

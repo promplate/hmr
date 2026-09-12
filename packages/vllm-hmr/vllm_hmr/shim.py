@@ -24,7 +24,25 @@ def should_install(env: dict[str, str]) -> bool:
 
 def load_runtime(spec: str):
     module, attribute = parse_runtime(spec)
-    return getattr(import_module(module), attribute)
+    target = getattr(import_module(module), attribute)
+    if not callable(target):
+        raise ValueError(f"HMR_VLLM_RUNTIME {spec!r} resolves to {type(target).__name__}, which is not callable")
+    return target
+
+
+def check_runtime(spec: str) -> None:
+    """Resolve the spec for real, so the wrapper can reject it before `execve`.
+
+    `site` reports a failing `sitecustomize` as one line on stderr and carries on, which inside
+    vLLM's startup output means a typo'd module, a missing attribute, or a non-callable target
+    reads as "HMR silently did nothing". Same resolution as `load_runtime`, minus the call.
+    """
+    try:
+        load_runtime(spec)
+    except ValueError:
+        raise
+    except Exception as exc:  # an ImportError from the runtime's own imports is equally fatal, and equally invisible later
+        raise ValueError(f"HMR_VLLM_RUNTIME {spec!r} could not be loaded: {type(exc).__name__}: {exc}") from exc
 
 
 def install_from_env(env: dict[str, str] | None = None) -> object | None:

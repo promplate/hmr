@@ -13,8 +13,9 @@ import asyncio
 import inspect
 import unittest
 from typing import Any
+from unittest import mock
 
-from vllm_hmr.runtime import telemetry
+from vllm_hmr.runtime import middleware, telemetry
 from vllm_hmr.runtime.middleware import HMRBoundaryMiddleware
 from vllm_hmr.runtime.worker import HMRWorkerExtension
 
@@ -121,6 +122,72 @@ class MiddlewareBoundaryTests(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             asyncio.run(HMRBoundaryMiddleware(Failing())({"type": "http", "path": "/v1/completions"}, None, None))
+
+
+class ConcurrentBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    """Two requests arriving together must not both cross the boundary as if they were alone.
+
+    `sync_pending`'s deferral and the worker RPC are both decided from `active_scopes()`, and
+    `await collective_rpc(...)` suspends between that decision and `scope_enter`. A second request
+    reaching the boundary during that suspension used to read zero too, so both published and both
+    fanned out to the workers, with the second publication landing while the first request was
+    already being served: exactly the mid-request swap the boundary exists to prevent.
+    """
+
+    def setUp(self):
+        self.assertEqual(telemetry.active_scopes(), 0)
+        self.addCleanup(lambda: self.assertEqual(telemetry.active_scopes(), 0))
+
+    async def test_the_second_request_sees_the_first_one_in_flight(self):
+        in_rpc, release_rpc, release_app = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        observed: list[int] = []  # `active_scopes()` as each request's boundary saw it
+
+        class BlockingEngine:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            async def collective_rpc(self, method: str, timeout=None, args=(), kwargs=None):
+                self.calls.append(method)
+                in_rpc.set()
+                await release_rpc.wait()  # hold the boundary open exactly where the race used to happen
+                return [{"installed": True}]
+
+        class BlockingApp:
+            """Stays in flight, so the second boundary really is concurrent with a live request."""
+
+            def __init__(self):
+                self.active_inside: list[int] = []
+
+            async def __call__(self, scope, receive, send):
+                self.active_inside.append(telemetry.active_scopes())
+                await release_app.wait()
+
+        def recording_sync_pending():  # the middleware calls it with no arguments
+            observed.append(telemetry.active_scopes())
+            return {"installed": True, "published": [], "rejected": []}
+
+        engine = BlockingEngine()
+        scope: dict[str, Any] = {"type": "http", "path": "/v1/completions", "app": FakeApp(engine)}
+        app = BlockingApp()
+        instance = HMRBoundaryMiddleware(app)  # one instance serves every request: Starlette builds the middleware stack once
+        with mock.patch.object(middleware, "sync_pending", recording_sync_pending):
+            first = asyncio.create_task(instance(dict(scope), None, None))
+            await in_rpc.wait()
+            second = asyncio.create_task(instance(dict(scope), None, None))
+            # Let the second task run until it can make no further progress on its own. Serialised,
+            # that is the boundary lock; unserialised, it is already past its own worker RPC.
+            for _ in range(10):
+                await asyncio.sleep(0)
+            self.assertEqual(observed, [0], "the second request must not publish while the first is still at the boundary")
+            release_rpc.set()
+            for _ in range(10):
+                await asyncio.sleep(0)
+            release_app.set()
+            await asyncio.gather(first, second)
+
+        self.assertEqual(observed, [0, 1], "the second boundary must run after the first request entered its scope, not beside it")
+        self.assertEqual(engine.calls, ["vllm_hmr_sync_pending"], "the second request must not fan out to the workers while the first is in flight")
+        self.assertEqual(app.active_inside, [1, 2])
 
 
 if __name__ == "__main__":
