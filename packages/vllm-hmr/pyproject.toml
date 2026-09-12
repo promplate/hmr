@@ -1,0 +1,33 @@
+[project]
+name = "vllm-hmr"
+description = "Hot Module Reloading wrapper for vLLM"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["vllm", "hot-reload", "hmr"]
+authors = [{ name = "Muspi Merol", email = "me@promplate.dev" }]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "hmr>=0.7,<0.8",
+    "watchfiles>=0.21,<2",
+]
+
+[project.scripts]
+vllm-hmr = "vllm_hmr:main"
+
+[project.urls]
+Homepage = "https://github.com/promplate/hmr"
+Documentation = "https://hmr.promplate.dev"
+Repository = "https://github.com/promplate/hmr/tree/HEAD/packages/vllm-hmr"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.build]
+includes = ["vllm_hmr/"]
