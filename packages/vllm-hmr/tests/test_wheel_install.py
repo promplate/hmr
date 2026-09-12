@@ -15,9 +15,8 @@ import os
 import shutil
 import subprocess
 import tempfile
-import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 UV = shutil.which("uv")
@@ -269,12 +268,12 @@ class CleanEnvTests(unittest.TestCase):
 
     def test_interpreter_and_hmr_variables_are_dropped_and_the_rest_survives(self):
         ambient = {"PATH": "/usr/bin", "HOME": "/home/x", "PYTHONPATH": "/src", "PYTHONHOME": "/py", "HMR_VLLM_DISABLED": "1", "HMR_VLLM_SOURCE_ROOT": "/elsewhere"}
-        with mock.patch.dict(os.environ, ambient, clear=True):
+        with unittest.mock.patch.dict(os.environ, ambient, clear=True):
             env = clean_env()
         self.assertEqual(env, {"PATH": "/usr/bin", "HOME": "/home/x"})
 
     def test_overrides_win_including_a_deliberate_pythonpath(self):
-        with mock.patch.dict(os.environ, {"PATH": "/usr/bin", "PYTHONPATH": "/src"}, clear=True):
+        with unittest.mock.patch.dict(os.environ, {"PATH": "/usr/bin", "PYTHONPATH": "/src"}, clear=True):
             env = clean_env(PYTHONPATH="/runtime", HMR_VLLM_SKIP="1")
         self.assertEqual(env, {"PATH": "/usr/bin", "PYTHONPATH": "/runtime", "HMR_VLLM_SKIP": "1"})
 

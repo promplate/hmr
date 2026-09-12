@@ -553,7 +553,7 @@ class ShimTests(unittest.TestCase):
         module.not_callable = 42  # pyright: ignore[reportAttributeAccessIssue]
         sys.modules["vllm_hmr_preflight_probe"] = module
         self.addCleanup(lambda: sys.modules.pop("vllm_hmr_preflight_probe", None))
-        self.assertIsNone(vllm_hmr_shim.check_runtime("vllm_hmr_preflight_probe:entry"))
+        vllm_hmr_shim.check_runtime("vllm_hmr_preflight_probe:entry")  # a resolvable spec is accepted by returning, so not raising is the assertion
         self.assertEqual(calls, [])  # a preflight that ran the runtime would install HMR in the wrapper, which is then replaced by `execve`
         for spec in ("vllm_hmr_preflight_probe:absent", "vllm_hmr_preflight_probe:not_callable", "vllm_hmr_no_such_module:entry", "not-a-spec"):
             with self.subTest(spec=spec), self.assertRaises(ValueError):

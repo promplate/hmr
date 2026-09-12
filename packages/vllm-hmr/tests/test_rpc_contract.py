@@ -11,9 +11,8 @@ from __future__ import annotations
 # ruff: noqa: ARG002, ASYNC109  # the fakes here must mirror vLLM's and ASGI's real signatures, unused parameters included
 import asyncio
 import inspect
-import unittest
+import unittest.mock
 from typing import Any
-from unittest import mock
 
 from vllm_hmr.runtime import middleware, telemetry
 from vllm_hmr.runtime.middleware import HMRBoundaryMiddleware
@@ -170,7 +169,7 @@ class ConcurrentBoundaryTests(unittest.IsolatedAsyncioTestCase):
         scope: dict[str, Any] = {"type": "http", "path": "/v1/completions", "app": FakeApp(engine)}
         app = BlockingApp()
         instance = HMRBoundaryMiddleware(app)  # one instance serves every request: Starlette builds the middleware stack once
-        with mock.patch.object(middleware, "sync_pending", recording_sync_pending):
+        with unittest.mock.patch.object(middleware, "sync_pending", recording_sync_pending):
             first = asyncio.create_task(instance(dict(scope), None, None))
             await in_rpc.wait()
             second = asyncio.create_task(instance(dict(scope), None, None))
