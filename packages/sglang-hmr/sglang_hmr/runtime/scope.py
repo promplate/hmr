@@ -143,6 +143,8 @@ def load_manifest(path: Path, expected_root: Path | None = None) -> Manifest:
         raise ScopeError(f"manifest {path} is missing required fields: {', '.join(missing)}")
     if not isinstance(raw["source_root"], str):
         raise ScopeError(f"manifest {path} field 'source_root' must be a string, got {type(raw['source_root']).__name__}")
+    if "\x00" in raw["source_root"]:
+        raise ScopeError(f"manifest {path} has an unusable source_root {raw['source_root']!r}: embedded NUL")
     try:
         source_root = Path(raw["source_root"]).resolve()
     except (OSError, ValueError) as exc:
