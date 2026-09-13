@@ -37,7 +37,9 @@ jobs:
       - name: Check typing
         run: bunx basedpyright
       - name: Test sglang-hmr
-        run: uv run pytest packages/sglang-hmr/tests
+        run: |
+          uv run pytest packages/sglang-hmr/tests
+          uv run pytest examples/sglang-cpu-hmr/tests
 
   publish:
     if: github.ref_type == 'tag'
