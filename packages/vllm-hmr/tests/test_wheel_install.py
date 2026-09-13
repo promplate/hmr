@@ -272,7 +272,7 @@ class WheelInstallTests(unittest.TestCase):
         """
         done = run(str(self.python), "-c", "import vllm_hmr; print(vllm_hmr.__file__)")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(Path(done.stdout.strip()), (self.site_packages / "vllm_hmr" / "__init__.py").resolve())
+        self.assertTrue(os.path.samefile(done.stdout.strip(), self.site_packages / "vllm_hmr" / "__init__.py"))
 
 
 class CleanEnvTests(unittest.TestCase):

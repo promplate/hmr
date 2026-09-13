@@ -441,7 +441,10 @@ class SourceDetectionTests(SourceTreeTestCase):
         original = sys.modules.get("vllm")
         sys.modules["vllm"] = module
         try:
-            self.assertEqual(vllm_hmr_source.find_editable_vllm_root(), self.source.resolve())
+            detected = vllm_hmr_source.find_editable_vllm_root()
+            self.assertIsNotNone(detected)
+            assert detected is not None
+            self.assertTrue(os.path.samefile(detected, self.source))
         finally:
             sys.modules.pop("vllm", None)
             if original is not None:

@@ -74,6 +74,12 @@ class TransactionRollbackTests(unittest.TestCase):
         self.assertEqual(provider_module.extract_prompt_components(), "V1")
         self.assertEqual(consumer_module.add_request(), "V1")
 
+        # This test drives one deterministic manual publication. Stop the real watcher before
+        # writing both files, otherwise it can independently queue the dependent on fast backends.
+        bootstrap._stop_watcher()  # noqa: SLF001
+        with bootstrap._STATE_LOCK:  # noqa: SLF001
+            bootstrap._PENDING.clear()  # noqa: SLF001
+
         from reactivity.hmr.core import get_path_module_map
 
         path_map = get_path_module_map()
