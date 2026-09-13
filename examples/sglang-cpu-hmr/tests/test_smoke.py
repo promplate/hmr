@@ -224,7 +224,7 @@ def test_smoke_writes_the_receipt_when_the_launcher_never_starts(tmp_path: Path,
 def test_teardown_tolerates_a_group_that_is_already_gone(monkeypatch: pytest.MonkeyPatch):
     """`poll()` said running, the group died, then we signalled: that must not mask the real error."""
     waits: list[float] = []
-    monkeypatch.setattr(os, "killpg", lambda *_: (_ for _ in ()).throw(ProcessLookupError()))
+    monkeypatch.setattr(os, "killpg", lambda *_: (_ for _ in ()).throw(ProcessLookupError()), raising=False)
     process = FakeProcess(pid=4321, on_wait=lambda timeout: waits.append(timeout))
     teardown(process)
     assert waits == []  # nothing left to reap
@@ -232,7 +232,7 @@ def test_teardown_tolerates_a_group_that_is_already_gone(monkeypatch: pytest.Mon
 
 def test_teardown_escalates_to_sigkill_when_sigterm_times_out(monkeypatch: pytest.MonkeyPatch):
     signals: list[int] = []
-    monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number))
+    monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number), raising=False)
 
     def on_wait(timeout: float) -> None:
         if len(signals) == 1:
@@ -250,7 +250,7 @@ def test_teardown_tolerates_the_group_dying_between_sigterm_timeout_and_sigkill(
         if number == signal.SIGKILL:
             raise ProcessLookupError
 
-    monkeypatch.setattr(os, "killpg", killpg)
+    monkeypatch.setattr(os, "killpg", killpg, raising=False)
     waits: list[float] = []
 
     def on_wait(timeout: float) -> None:
@@ -266,21 +266,21 @@ def test_teardown_tolerates_the_group_dying_between_sigterm_timeout_and_sigkill(
 def test_teardown_signals_the_group_not_the_single_pid(monkeypatch: pytest.MonkeyPatch):
     """SGLang spawns scheduler children; killing only the launcher leaks them past the container."""
     targets: list[int] = []
-    monkeypatch.setattr(os, "killpg", lambda pid, _number: targets.append(pid))
+    monkeypatch.setattr(os, "killpg", lambda pid, _number: targets.append(pid), raising=False)
     monkeypatch.setattr(os, "kill", lambda *_: pytest.fail("teardown must not signal a single pid"))
     teardown(FakeProcess(pid=4321, on_wait=lambda _: None))
     assert targets == [4321]
 
 
 def test_teardown_returns_none_on_clean_exit(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(os, "killpg", lambda *_: None)
+    monkeypatch.setattr(os, "killpg", lambda *_: None, raising=False)
     result = teardown(FakeProcess(pid=4321, on_wait=lambda _: None))
     assert result is None
 
 
 def test_teardown_returns_an_error_when_sigkill_times_out(monkeypatch: pytest.MonkeyPatch):
     signals: list[int] = []
-    monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number))
+    monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number), raising=False)
 
     def on_wait(timeout: float) -> None:
         raise subprocess.TimeoutExpired(cmd="sglang", timeout=timeout)
@@ -292,7 +292,7 @@ def test_teardown_returns_an_error_when_sigkill_times_out(monkeypatch: pytest.Mo
 
 
 def test_teardown_returns_an_error_on_unexpected_exception(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(os, "killpg", lambda *_: (_ for _ in ()).throw(PermissionError("denied")))
+    monkeypatch.setattr(os, "killpg", lambda *_: (_ for _ in ()).throw(PermissionError("denied")), raising=False)
     result = teardown(FakeProcess(pid=4321, on_wait=lambda _: None))
     assert result is not None
     assert "PermissionError" in result
@@ -326,7 +326,7 @@ def test_smoke_writes_teardown_error_to_receipt_on_sigkill_timeout(tmp_path: Pat
     monkeypatch.setattr(smoke.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(smoke, "wait_ready", lambda *_: None)
     monkeypatch.setattr(smoke, "generate", lambda _: (503, {}, {"error": "startup incomplete"}))
-    monkeypatch.setattr(os, "killpg", lambda *_: None)
+    monkeypatch.setattr(os, "killpg", lambda *_: None, raising=False)
     args = metadata_args(source=str(source), results=str(results), model="m", port=31000, startup_timeout=1)
     with pytest.raises(AssertionError):  # the smoke will fail on the 503
         smoke.run(args)
