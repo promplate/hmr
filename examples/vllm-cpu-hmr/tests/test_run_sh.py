@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import signal
 import subprocess
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ DOCKER_MOCK = Path(__file__).resolve().parent / "docker_mock.sh"
 ARTIFACTS = ("cpu-smoke-receipt.json", "cpu-smoke-full.log", "cpu-source-manifest.json", "cpu-runner-full.log", "cpu-container.cid", "cpu-container-receipt.json")
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "run.sh requires Linux Bash, flock, and the official CPU Docker image")
 class RunScriptTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(TemporaryDirectory()))
