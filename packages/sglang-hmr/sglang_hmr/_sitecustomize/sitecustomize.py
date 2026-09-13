@@ -7,7 +7,8 @@ thing we do is chain to that one, so an environment that already relies on its
 own `sitecustomize` keeps working.
 
 Nothing is injected unless `HMR_SGLANG_ENABLE=1` and `HMR_SGLANG_RUNTIME` are both
-set, so a plain `sglang-hmr serve ...` remains a bare SGLang launch.
+set, so `sglang-hmr --hmr-disabled serve ...` and plain `sglang` launches remain
+bare SGLang.
 """
 
 from sglang_hmr.shim import chain_to_next_sitecustomize, install_from_env
