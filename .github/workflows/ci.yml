@@ -36,6 +36,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Check typing
         run: bunx basedpyright
+      - name: Test sglang-hmr
+        run: uv run pytest packages/sglang-hmr/tests
 
   publish:
     if: github.ref_type == 'tag'
@@ -48,6 +50,7 @@ jobs:
           - fastapi-reloader
           - hmr-daemon
           - mcp-hmr
+          - sglang-hmr
       fail-fast: false
     needs: [typos, check]
     permissions:
