@@ -4,7 +4,7 @@ set -euo pipefail
 IMAGE="${SGLANG_HMR_IMAGE:-sglang-cpu-hmr-example:local}"
 BASE_IMAGE="lmsysorg/sglang:v0.5.16-xeon"
 PYTH_ON_LINE_SHA="d410f975367e8a29b17183d108ef09a089e42b63"
-RESULTS="${SGLANG_HMR_RESULTS:-$PWD/sglang-cpu-hmr-results}"
+RESULTS="${SGLANG_HMR_RESULTS:-$PWD/examples/sglang-cpu-hmr/sglang-cpu-hmr-results}"
 NAME="sglang-cpu-hmr-$(date +%s)"
 
 if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then

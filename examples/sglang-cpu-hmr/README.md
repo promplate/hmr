@@ -19,8 +19,8 @@ installs `hmr` from the pinned `promplate/pyth-on-line` commit
 writes:
 
 ```text
-sglang-cpu-hmr-results/cpu-smoke-receipt.json
-sglang-cpu-hmr-results/cpu-smoke-full.log
+examples/sglang-cpu-hmr/sglang-cpu-hmr-results/cpu-smoke-receipt.json
+examples/sglang-cpu-hmr/sglang-cpu-hmr-results/cpu-smoke-full.log
 ```
 
 Set `SGLANG_HMR_MODEL` to use another compatible small model and
