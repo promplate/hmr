@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from importlib import import_module
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 SKIP_MARKER = "HMR_SGLANG_SKIP"
@@ -68,6 +69,18 @@ def chain_to_next_sitecustomize(shim_file: str) -> Path | None:
     target = next_sitecustomize(shim_file)
     if target is None:
         return None
-    code = compile(target.read_text(encoding="utf-8"), str(target), "exec")
-    exec(code, {"__file__": str(target), "__name__": "sitecustomize"})
+    if target.name == "__init__.py":
+        alias = "_hmr_chained_sitecustomize"
+        spec = spec_from_file_location(alias, target, submodule_search_locations=[str(target.parent)])
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load chained sitecustomize package {target}")
+        module = module_from_spec(spec)
+        sys.modules[alias] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(alias, None)
+    else:
+        code = compile(target.read_text(encoding="utf-8"), str(target), "exec")
+        exec(code, {"__file__": str(target), "__name__": "sitecustomize"})
     return target

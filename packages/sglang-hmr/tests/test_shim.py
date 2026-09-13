@@ -124,6 +124,15 @@ def test_a_sitecustomize_package_is_chained_too(tmp_path: Path):
     assert run_python(base_env(str(SHIM_DIR), str(directory)))["chained"] == "package-form"
 
 
+def test_a_sitecustomize_package_can_use_relative_imports(tmp_path: Path):
+    directory = tmp_path / "pkg-site"
+    package = directory / "sitecustomize"
+    package.mkdir(parents=True)
+    (package / "helper.py").write_text("VALUE = 'relative-package'\n", encoding="utf-8")
+    (package / "__init__.py").write_text("from .helper import VALUE\nimport os\nos.environ['CHAINED_BY'] = VALUE\n", encoding="utf-8")
+    assert run_python(base_env(str(SHIM_DIR), str(directory)))["chained"] == "relative-package"
+
+
 # --- runtime spec parsing ---
 
 
@@ -199,7 +208,8 @@ def test_install_from_env_calls_the_runtime(tmp_path: Path):
     sys.path.insert(0, str(runtime_dir))
     try:
         result = install_from_env({"HMR_SGLANG_ENABLE": "1", "HMR_SGLANG_RUNTIME": "fake_runtime:install"})
-        assert os.environ.pop("TEST_SHIM_INSTALL_RAN", None) == "1"
+        marker = os.environ.pop("TEST_SHIM_INSTALL_RAN", None)
+        assert marker == "1"
         assert result == "runtime-result"
     finally:
         sys.path[:] = original_path
