@@ -7,8 +7,12 @@ dependencies = [
     "hmr~=0.7.0",
     "mcp-hmr",
     "ruff~=0.15.4",
+    "sglang-hmr",
     "uvicorn-hmr",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8,<9"]
 
 [tool.uv.workspace]
 members = ["examples/*", "packages/*"]
@@ -17,6 +21,7 @@ members = ["examples/*", "packages/*"]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }
 mcp-hmr = { workspace = true }
+sglang-hmr = { workspace = true }
 
 [tool.pyright]
 typeCheckingMode = "standard"
