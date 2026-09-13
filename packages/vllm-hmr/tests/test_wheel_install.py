@@ -71,13 +71,13 @@ class WheelInstallTests(unittest.TestCase):
         # `requires-python` is >=3.12; ask uv for that rather than trusting the ambient python3.
         created = run(UV, "venv", "--python", "3.12", str(venv))
         assert created.returncode == 0, f"uv venv failed:\n{created.stdout}\n{created.stderr}"
-        python = venv / "bin" / "python"
+        python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         installed = run(UV, "pip", "install", "--python", str(python), str(wheels[0]))
         assert installed.returncode == 0, f"wheel install failed:\n{installed.stdout}\n{installed.stderr}"
 
-        cls.script = venv / "bin" / "vllm-hmr"
+        cls.script = venv / ("Scripts/vllm-hmr.exe" if os.name == "nt" else "bin/vllm-hmr")
         cls.python = python
-        cls.site_packages = next((venv / "lib").glob("python3.*")) / "site-packages"
+        cls.site_packages = venv / "Lib/site-packages" if os.name == "nt" else next((venv / "lib").glob("python3.*")) / "site-packages"
 
     @classmethod
     def tearDownClass(cls):
@@ -87,7 +87,7 @@ class WheelInstallTests(unittest.TestCase):
         """A fake `vllm` on PATH, so nothing here needs real vLLM installed."""
         stub_dir = Path(self.tmp.name) / f"stub-{self.id().rsplit('.', 1)[-1]}"
         stub_dir.mkdir(exist_ok=True)
-        stub = stub_dir / "vllm"
+        stub = stub_dir / ("vllm.cmd" if os.name == "nt" else "vllm")
         stub.write_text(body, encoding="utf-8")
         stub.chmod(0o755)
         return stub_dir
@@ -137,11 +137,12 @@ class WheelInstallTests(unittest.TestCase):
         self.assertIn("HMR_VLLM_ENABLE=1", done.stdout)
         self.assertIn(f"HMR_VLLM_RUNTIME={OVERRIDE_RUNTIME}", done.stdout)
         # The shim must resolve inside the installed package, never back to this source checkout.
-        shim = self.site_packages / "vllm_hmr" / "_sitecustomize"
+        shim = (self.site_packages / "vllm_hmr" / "_sitecustomize").resolve()
         self.assertTrue((shim / "sitecustomize.py").is_file(), f"wheel did not ship {shim}/sitecustomize.py")
         self.assertIn(f"PYTHONPATH={shim}", done.stdout)
         self.assertNotIn(str(PACKAGE_ROOT), done.stdout)
 
+    @unittest.skipIf(os.name == "nt", "the verified vLLM CLI and shell stub are POSIX-only")
     def test_installed_shim_injects_into_the_exec_d_interpreter(self):
         """The whole point of the package: the exec'd interpreter runs the configured runtime before vLLM."""
         root = Path(self.tmp.name)
@@ -193,6 +194,7 @@ class WheelInstallTests(unittest.TestCase):
         self.assertIn("--hmr-disabled", done.stderr)
         self.assertNotIn("Traceback", done.stderr)
 
+    @unittest.skipIf(os.name == "nt", "the verified vLLM CLI and shell stub are POSIX-only")
     def test_skip_marker_suppresses_injection_after_install(self):
         root = Path(self.tmp.name)
         runtime_dir = root / "runtime-skip"
@@ -216,6 +218,7 @@ class WheelInstallTests(unittest.TestCase):
             f"#!/bin/sh\necho \"argv: $@\"\nexec \"{self.python}\" -c \"import os; print(os.environ.get('PYTHONPATH', '<unset>')); print(sorted(k for k in os.environ if k.startswith('HMR_VLLM_')))\"\n"
         )
 
+    @unittest.skipIf(os.name == "nt", "the verified vLLM CLI and shell stub are POSIX-only")
     def test_disabled_launch_does_not_inject(self):
         """`--hmr-disabled` is the documented opt-out: no shim on PYTHONPATH, no HMR_VLLM_* exported, no vLLM flags added."""
         stub_dir = self.report_env_stub_dir()
@@ -225,6 +228,7 @@ class WheelInstallTests(unittest.TestCase):
         self.assertIn("<unset>", done.stdout)
         self.assertIn("[]", done.stdout)
 
+    @unittest.skipIf(os.name == "nt", "the verified vLLM CLI and shell stub are POSIX-only")
     def test_disabled_launch_strips_an_inherited_activation(self):
         """An environment that already carries our activation must still get a plain `vllm`.
 
@@ -235,7 +239,7 @@ class WheelInstallTests(unittest.TestCase):
         """
         stub_dir = self.report_env_stub_dir()
         mine = str(Path(self.tmp.name) / "my-own-pythonpath")
-        shim = self.site_packages / "vllm_hmr" / "_sitecustomize"
+        shim = (self.site_packages / "vllm_hmr" / "_sitecustomize").resolve()
         env = clean_env(
             PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
             PYTHONPATH=f"{shim}{os.pathsep}{mine}",
@@ -250,6 +254,7 @@ class WheelInstallTests(unittest.TestCase):
         self.assertNotIn("HMR_VLLM_ENABLE", done.stdout)  # the gate `sitecustomize` checks is gone, and so is the shim that would check it
         self.assertIn("HMR_VLLM_RUNTIME", done.stdout)  # a documented user variable, inert without the gate: not ours to delete
 
+    @unittest.skipIf(os.name == "nt", "the verified vLLM CLI and shell stub are POSIX-only")
     def test_non_serve_subcommand_is_untouched(self):
         stub_dir = self.report_env_stub_dir()
         done = run(str(self.script), "chat", "--url", "http://localhost:8000", env=clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}"))
@@ -267,7 +272,7 @@ class WheelInstallTests(unittest.TestCase):
         """
         done = run(str(self.python), "-c", "import vllm_hmr; print(vllm_hmr.__file__)")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout.strip(), str(self.site_packages / "vllm_hmr" / "__init__.py"))
+        self.assertEqual(Path(done.stdout.strip()), (self.site_packages / "vllm_hmr" / "__init__.py").resolve())
 
 
 class CleanEnvTests(unittest.TestCase):

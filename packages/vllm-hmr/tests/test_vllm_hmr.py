@@ -129,8 +129,8 @@ class EnvironmentTests(SourceTreeTestCase):
         env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source)}, {}, serve=True)
         self.assertEqual(env["HMR_VLLM_ENABLE"], "1")
         self.assertEqual(env["HMR_VLLM_RUNTIME"], vllm_hmr.DEFAULT_RUNTIME)
-        self.assertEqual(env["HMR_VLLM_SOURCE_ROOT"], str(self.source))
-        self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0], str(vllm_hmr.SHIM_DIR))
+        self.assertEqual(Path(env["HMR_VLLM_SOURCE_ROOT"]), self.source.resolve())
+        self.assertEqual(Path(env["PYTHONPATH"].split(os.pathsep)[0]), vllm_hmr.SHIM_DIR.resolve())
 
     def test_explicit_runtime_overrides_the_default(self):
         env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
@@ -274,7 +274,12 @@ class EnvironmentTests(SourceTreeTestCase):
         self.assertEqual(env["HMR_VLLM_MANIFEST"], str(path))
 
     def test_relative_source_root_is_absolutised(self):
-        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": os.path.relpath(self.source)}, {}, serve=True)
+        original = Path.cwd()
+        os.chdir(self.source.parent)
+        try:
+            env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": os.path.relpath(self.source)}, {}, serve=True)
+        finally:
+            os.chdir(original)
         self.assertEqual(env["HMR_VLLM_SOURCE_ROOT"], str(self.source.resolve()))
 
     def test_shim_is_not_duplicated_on_pythonpath(self):
@@ -285,7 +290,7 @@ class EnvironmentTests(SourceTreeTestCase):
     def test_cli_options_override_inherited_variables(self):
         other = make_source_tree(Path(self.tmp.name) / "other")
         env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(other)}, {"HMR_VLLM_SOURCE_ROOT": str(self.source)}, serve=True)
-        self.assertEqual(env["HMR_VLLM_SOURCE_ROOT"], str(other))
+        self.assertEqual(Path(env["HMR_VLLM_SOURCE_ROOT"]), other.resolve())
 
     def test_inherited_source_root_alone_enables_injection(self):
         env = vllm_hmr.build_env({}, self.base_env(), serve=True)
@@ -404,7 +409,7 @@ class ExecTests(SourceTreeTestCase):
         finally:
             shutil_module.which = original_which
         printed = out.getvalue()
-        self.assertIn(f"HMR_VLLM_SOURCE_ROOT={self.source}", printed)
+        self.assertIn(f"HMR_VLLM_SOURCE_ROOT={self.source.resolve()}", printed)
         self.assertIn(f"HMR_VLLM_RUNTIME={vllm_hmr.DEFAULT_RUNTIME}", printed)
         self.assertIn(f"{FAKE_VLLM} serve m --middleware", printed)
 
@@ -436,7 +441,7 @@ class SourceDetectionTests(SourceTreeTestCase):
         original = sys.modules.get("vllm")
         sys.modules["vllm"] = module
         try:
-            self.assertEqual(vllm_hmr_source.find_editable_vllm_root(), self.source)
+            self.assertEqual(vllm_hmr_source.find_editable_vllm_root(), self.source.resolve())
         finally:
             sys.modules.pop("vllm", None)
             if original is not None:
@@ -671,11 +676,11 @@ class ShimTests(unittest.TestCase):
             sentinel = root / "chained.txt"
             (other / "sitecustomize.py").write_text(f"with open({str(sentinel)!r}, 'w') as f: f.write('chained')\n", encoding="utf-8")
             path = [str(shim_dir), str(other)]
-            self.assertEqual(vllm_hmr_shim.next_sitecustomize(str(shim_file), path), other / "sitecustomize.py")
+            self.assertEqual(vllm_hmr_shim.next_sitecustomize(str(shim_file), path), (other / "sitecustomize.py").resolve())
             original = sys.path
             sys.path = path
             try:
-                self.assertEqual(vllm_hmr_shim.chain_to_next_sitecustomize(str(shim_file)), other / "sitecustomize.py")
+                self.assertEqual(vllm_hmr_shim.chain_to_next_sitecustomize(str(shim_file)), (other / "sitecustomize.py").resolve())
             finally:
                 sys.path = original
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "chained")

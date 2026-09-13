@@ -169,6 +169,14 @@ def inject_vllm_flags(forwarded: list[str]) -> list[str]:
     return [*head, *extra, *tail]
 
 
+def _same_path(left: str | Path, right: str | Path) -> bool:
+    """Compare path identity across aliases such as macOS `/var` and `/private/var`."""
+    try:
+        return Path(left).resolve() == Path(right).resolve()
+    except (OSError, ValueError):
+        return False
+
+
 def deactivate(env: dict[str, str]) -> dict[str, str]:
     """Undo an activation this wrapper may have inherited, and nothing else.
 
@@ -185,7 +193,7 @@ def deactivate(env: dict[str, str]) -> dict[str, str]:
     if "PYTHONPATH" in env:
         # Exact-match filtering, so a user entry that merely contains our path is untouched. An
         # empty result means the shim was the only entry, i.e. we put it there: drop the variable.
-        remaining = os.pathsep.join(entry for entry in env["PYTHONPATH"].split(os.pathsep) if entry != str(SHIM_DIR))
+        remaining = os.pathsep.join(entry for entry in env["PYTHONPATH"].split(os.pathsep) if not _same_path(entry, SHIM_DIR))
         env["PYTHONPATH"] = remaining
         if not remaining:
             del env["PYTHONPATH"]
@@ -233,7 +241,7 @@ def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> 
     env["HMR_VLLM_ENABLE"] = "1"
     shim = str(SHIM_DIR)
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = shim if not existing else f"{shim}{os.pathsep}{existing}" if shim not in existing.split(os.pathsep) else existing
+    env["PYTHONPATH"] = shim if not existing else existing if any(_same_path(entry, SHIM_DIR) for entry in existing.split(os.pathsep)) else f"{shim}{os.pathsep}{existing}"
     return env
 
 

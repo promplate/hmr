@@ -92,7 +92,8 @@ def install_from_env() -> None:
         _reset_digest_baseline(manifest)
         _start_watcher()
         atexit.register(_stop_watcher)
-        os.register_at_fork(after_in_child=_after_fork)
+        if register_at_fork := getattr(os, "register_at_fork", None):
+            register_at_fork(after_in_child=_after_fork)
         _INSTALLED = True
 
 
