@@ -92,7 +92,8 @@ def install_from_env() -> None:
         _reset_digest_baseline(manifest)
         _start_watcher()
         atexit.register(_stop_watcher)
-        os.register_at_fork(after_in_child=_after_fork)
+        if register_at_fork := getattr(os, "register_at_fork", None):
+            register_at_fork(after_in_child=_after_fork)
         _INSTALLED = True
 
 
@@ -277,17 +278,27 @@ def _watch() -> None:
             stop_event=_WATCH_STOP,
         ):
             now = time.monotonic()
+            observed: list[tuple[Path, str, str]] = []
+            for change, raw in changes:
+                if change is Change.deleted:
+                    continue
+                path = Path(raw).resolve()
+                try:
+                    rel = path.relative_to(source_root).as_posix()
+                except ValueError:
+                    continue
+                if rel not in _MANIFEST.reactive_paths:
+                    continue
+                try:
+                    digest = sha256(path)
+                except (ScopeError, OSError):
+                    continue
+                observed.append((path, rel, digest))
             with _STATE_LOCK:
-                for change, raw in changes:
-                    if change is Change.deleted:
+                for path, rel, digest in observed:
+                    if _FILE_DIGESTS.get(rel) == digest:
                         continue
-                    path = Path(raw).resolve()
-                    try:
-                        rel = path.relative_to(source_root).as_posix()
-                    except ValueError:
-                        continue
-                    if rel not in _MANIFEST.reactive_paths:
-                        continue
+                    _FILE_DIGESTS[rel] = digest
                     _PENDING[path] = {"path": rel, "seen_at": now}
                     event("source_change", path=rel)
     except Exception as exc:

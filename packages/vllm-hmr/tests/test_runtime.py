@@ -63,7 +63,7 @@ class RuntimePublicationTests(unittest.TestCase):
         self.addCleanup(_cleanup_finder)
         state = bootstrap.state()
         self.assertTrue(state["installed"])
-        self.assertEqual(state["manifest"]["source_root"], str(root))
+        self.assertEqual(Path(state["manifest"]["source_root"]), root.resolve())
         self.assertEqual(state["manifest"]["reactive_paths"], list(scope.REACTIVE_PATHS))
 
         consumer = importlib.import_module(scope.DEPENDENT)
