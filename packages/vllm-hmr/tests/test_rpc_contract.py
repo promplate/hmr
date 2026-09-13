@@ -68,6 +68,22 @@ class RPCContractTests(unittest.TestCase):
             # `run_method` calls `getattr(worker, name)(*args, **kwargs)`: the bound signature must accept them.
             inspect.signature(method).bind(object(), *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
+    def test_terminal_refusal_skips_worker_fanout(self):
+        """When the API process is installed but terminally broken, workers must not advance alone."""
+        engine = FakeEngine()
+        with unittest.mock.patch("vllm_hmr.runtime.middleware.sync_pending") as mock_sync:
+            # The shape a watcher-recovery-exhausted boundary actually returns
+            mock_sync.return_value = {
+                "installed": True,
+                "hmr_available": False,
+                "watcher_failed": True,
+                "watcher_recovery": {"attempted": False, "recovered": False, "exhausted": True, "restarts": 3, "missed": []},
+                "published": [],
+                "rejected": [],
+            }
+            run_middleware("/v1/completions", engine)
+        self.assertEqual(engine.calls, [], "a terminally broken API process must not ask workers to advance")
+
     def test_worker_rpcs_are_namespaced_so_vllm_cannot_reject_the_mixin(self):
         """`init_worker` asserts no public attribute of the extension collides with the worker class."""
         public = [name for name in dir(HMRWorkerExtension) if not name.startswith("__")]
