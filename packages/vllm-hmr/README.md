@@ -10,7 +10,7 @@ Scope is deliberately narrow. This is not a general "reload any vLLM module" too
 pip install vllm-hmr
 ```
 
-vLLM itself is **not** bundled; install it separately (`pip install vllm`). The wrapper `exec`s the official `vllm` executable it finds on `PATH`.
+vLLM itself is **not** bundled. The verified release is 0.28.0 (`pip install "vllm==0.28.0"`); other versions are not supported by the current evidence. The wrapper `exec`s the official `vllm` executable it finds on `PATH`.
 
 ## Usage
 
@@ -55,6 +55,11 @@ Each has an environment variable equivalent; CLI options win.
 | `--hmr-disabled` | `HMR_VLLM_DISABLED` | plain `vllm` launch: no injection, no flags added (any non-empty value). An activation already present in the environment is removed, so this also opts out inside a shell or script that exported `HMR_VLLM_*` earlier |
 | `--hmr-print-env` | — | print the computed environment and exec argv, then exit |
 
+Two runtime-only controls are environment variables rather than CLI arguments:
+
+- `HMR_VLLM_RPC_TIMEOUT_S` bounds worker publication RPCs in seconds (default `30`; non-positive or invalid values use the default).
+- `HMR_VLLM_MAX_WATCHER_RESTARTS` limits consecutive watcher recovery attempts (default `3`; a successful healthy boundary resets the budget). Recovery rescans content hashes so edits made while the watcher was down are not lost; exhaustion marks HMR unavailable and leaves pending edits undrained.
+
 ## How it works
 
 1. The wrapper resolves the source root, appends the two vLLM flags, exports `HMR_VLLM_*`, and prepends its own `sitecustomize` directory to `PYTHONPATH`.
@@ -73,6 +78,8 @@ Two files are reloadable, and a manifest must name exactly that set in every one
 A manifest recording the source root, per-file SHA-256, and reactive paths is generated at startup, or verified if you pass `--hmr-manifest`. A missing file, a stale hash, a mismatched source root, a missing or extra path or module, a missing field, a wrongly typed field, unparsable JSON, or an unknown schema version fails immediately, before anything is watched — and a `--hmr-manifest` is verified by the wrapper too, since a manifest first read inside `sitecustomize` would fail as one stderr line in vLLM's startup output, i.e. as silently missing HMR. Narrowing is rejected for the same reason as widening: a manifest that watches nothing, or that swaps the provider without re-executing its consumer, installs a runtime that looks healthy and serves stale code. Source files are never modified by this package.
 
 Publication also verifies the source root against reality: an in-scope file the live process did not import from that root is **rejected**, not reported as published. This is what catches a source root that is only a copy of an installed vLLM — the process is running the installed one, so no edit to the copy can reach it.
+
+If a target or forced dependent raises while reloading, the runtime restores the pre-publication name bindings and keeps the existing module objects. This rollback is intentionally shallow: in-place mutations to an already-bound mutable object cannot be undone generically, so reloadable modules must not perform such side effects at import time.
 
 ## Capability limits
 

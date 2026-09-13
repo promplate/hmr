@@ -53,6 +53,14 @@ class RuntimePublicationTests(unittest.TestCase):
         self.set_env("HMR_VLLM_SOURCE_ROOT", str(root))
         bootstrap.install_from_env()
         self.addCleanup(bootstrap._stop_watcher)  # noqa: SLF001 - the watcher thread is module-private but must not outlive the test
+        # Remove the ReactiveModuleFinder this test installed, so it doesn't interfere with later tests
+        from reactivity.hmr.core import ReactiveModuleFinder
+
+        def _cleanup_finder():
+            sys.meta_path[:] = [f for f in sys.meta_path if not isinstance(f, ReactiveModuleFinder)]
+            bootstrap._INSTALLED = False  # noqa: SLF001
+
+        self.addCleanup(_cleanup_finder)
         state = bootstrap.state()
         self.assertTrue(state["installed"])
         self.assertEqual(state["manifest"]["source_root"], str(root))

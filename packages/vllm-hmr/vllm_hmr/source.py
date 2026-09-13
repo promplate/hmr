@@ -21,7 +21,18 @@ def find_editable_vllm_root() -> Path | None:
     """If `import vllm` resolves to an editable source checkout, return its root."""
     try:
         import vllm
-    except ImportError:
+    except (ImportError, OSError, RuntimeError):
+        # `ImportError`: vLLM not installed or a missing transitive dependency at import time.
+        # `OSError`/`RuntimeError`: importing vLLM loads torch and native extensions, so a
+        # partially installed wheel or a driver mismatch raises from deep inside that chain rather
+        # than as a top-level `ImportError`. `build_env` only handles `SourceRootError`, so
+        # anything else escapes `main`'s handler as a traceback instead of the message naming
+        # `--hmr-source-root` and `--hmr-disabled`.
+        #
+        # Python removes the top-level `vllm` from `sys.modules` on a failed import, but
+        # successfully imported submodules from partway through the chain stay behind (verified).
+        # This is fine for detection — we only read `vllm.__file__`, and the top-level is gone —
+        # but a later successful `import vllm` may bind stale submodules from this first attempt.
         return None
     if vllm.__file__ is None:
         return None

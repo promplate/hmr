@@ -36,7 +36,14 @@ def clean_env(**overrides: str) -> dict[str, str]:
 
 
 def run(*argv: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, capture_output=True, text=True, timeout=300, env=clean_env() if env is None else env, check=False)
+    """Every subprocess here runs from a neutral directory, not the caller's.
+
+    `clean_env` drops `PYTHONPATH`, but cwd is the other way this checkout shadows the wheel:
+    `python -c` puts cwd on `sys.path[0]`, so running pytest from inside the package directory
+    made these probes import `vllm_hmr/` from the source tree while claiming to exercise the
+    installed wheel. The temp directory contains no `vllm_hmr`, so the wheel is what resolves.
+    """
+    return subprocess.run(argv, capture_output=True, text=True, timeout=300, env=clean_env() if env is None else env, cwd=tempfile.gettempdir(), check=False)
 
 
 @unittest.skipIf(UV is None, "requires `uv` to build the wheel and provision an interpreter")

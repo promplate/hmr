@@ -11,6 +11,9 @@ dependencies = [
     "vllm-hmr",
 ]
 
+[dependency-groups]
+dev = ["pytest>=8,<9"]
+
 [tool.uv.workspace]
 members = ["examples/*", "packages/*"]
 
