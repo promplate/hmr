@@ -16,12 +16,18 @@ docker pull vllm/vllm-openai-cpu:v0.28.0-x86_64
 The script builds a local image from the official vLLM CPU image, fetches and
 installs `hmr` from the pinned `promplate/pyth-on-line` commit
 `d410f975367e8a29b17183d108ef09a089e42b63`, starts one real vLLM server, and
-writes:
+writes the complete evidence set under `vllm-cpu-hmr-results/`:
 
 ```text
-vllm-cpu-hmr-results/cpu-smoke-receipt.json
-vllm-cpu-hmr-results/cpu-smoke-full.log
+cpu-smoke-receipt.json      # Python smoke assertions and before/after identity
+cpu-smoke-full.log          # real vLLM server stdout/stderr
+cpu-source-manifest.json    # exact watched source hashes and scope
+cpu-runner-full.log         # Docker build/run/cleanup output
+cpu-container-receipt.json  # runner stage, exit codes, container identity/removal
+cpu-container.cid           # the exact disposable container ID
 ```
+
+The runner refuses to overwrite any of these paths. Build, metadata, probe, signal, and cleanup failures still produce `cpu-container-receipt.json`; a cleanup failure forces a non-zero runner exit while retaining the probe's original `run_exit_code`.
 
 Set `VLLM_HMR_MODEL` to use another compatible small model and
 `VLLM_HMR_RESULTS` to choose another output directory. The default model is

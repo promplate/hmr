@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """One-item real-vLLM CPU HMR smoke for the official CPU image."""
 
-# pyright: reportReturnType=false, reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportArgumentType=false, reportAttributeAccessIssue=false
+# `reactivity.hmr` is installed in the official CPU image, not in this repository's environment.
+# pyright: reportReturnType=false, reportOptionalMemberAccess=false, reportOptionalSubscript=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportMissingImports=false
 
 from __future__ import annotations
 
@@ -15,6 +16,8 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from contextlib import suppress
+from importlib.metadata import distribution
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,7 @@ PROBE_WORKER_EXTENSION = "hmr_vllm_probe.worker.HMRProbeWorkerExtension"
 MARKER = "HMR_PROBE_VLLM_CPU_PRINT_D410F975_001"
 WORKER_OUT_OF_MAP = "not loaded from this source root"  # `vllm_hmr.runtime.bootstrap`'s refusal when a worker never imported the target
 PYTH_SHA = "d410f975367e8a29b17183d108ef09a089e42b63"
+SIGKILL = getattr(signal, "SIGKILL", signal.SIGTERM)  # Fallback for Windows CI import; stop_server only runs on Linux.
 
 
 def sha256(path: Path) -> str:
@@ -38,6 +42,42 @@ def sha256(path: Path) -> str:
 
 def python_source_hashes(root: Path) -> dict[str, str]:
     return {path.relative_to(root).as_posix(): sha256(path) for path in sorted((root / "vllm").rglob("*.py"))}
+
+
+def changed_sources(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    return sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
+
+
+def verify_release(source: Path, args: argparse.Namespace) -> dict[str, str]:
+    from reactivity.hmr import core
+
+    installed = Path(args.installed_source).resolve()
+    dist = distribution("vllm")
+    if dist.version != args.vllm_version or Path(dist.locate_file("vllm")).resolve() != installed:
+        raise AssertionError("release/source mismatch: installed vLLM distribution differs from the receipt inputs")
+    baseline = python_source_hashes(source)
+    if not baseline or baseline != python_source_hashes(installed.parent):
+        raise AssertionError("release/source mismatch: runtime Python sources differ from the installed wheel")
+    if Path(core.__file__).resolve() != Path(args.pyth_core_path).resolve() or sha256(Path(core.__file__)) != args.pyth_core_sha256:
+        raise AssertionError("release/source mismatch: imported HMR core differs from the receipt inputs")
+    return baseline
+
+
+def stop_server(process: subprocess.Popen) -> None:
+    # A dead group leader does not mean an empty group: vLLM's engine and worker processes
+    # can outlive it, so the group is always signalled rather than skipped on leader exit.
+    # `killpg` also races the leader's own exit, where ESRCH means "already gone", not a failure.
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        # Only escalate when SIGTERM did not bring the leader down. Escalating unconditionally
+        # SIGKILLs the whole group with zero grace even on the clean path, cutting off the
+        # engine/worker teardown that was already flushing its own evidence.
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, SIGKILL)
+        process.wait(timeout=30)
 
 
 def request_json(
@@ -221,26 +261,29 @@ def run(args: argparse.Namespace) -> None:
     log_path = results / "cpu-smoke-full.log"
     receipt_path = results / "cpu-smoke-receipt.json"
 
+    manifest_path = results / "cpu-source-manifest.json"
+    for artifact in (receipt_path, log_path, manifest_path):
+        if artifact.exists():
+            raise FileExistsError(f"refusing to overwrite existing evidence: {artifact}")
     target = source / TARGET
-    if not target.is_file():
-        raise FileNotFoundError(f"release/source mismatch: runtime target absent: {target}")
-    original_target_hash = sha256(target)
-    baseline_hashes = python_source_hashes(source)
+    # Both stay None until the release check below establishes them, so every teardown path can
+    # tell "never measured" from "measured and unchanged" without a second flag.
+    original_target_hash: str | None = None
+    baseline_hashes: dict[str, str] | None = None
     # Exactly what `vllm_hmr.runtime.scope.build_manifest` would produce for this root:
     # written out and passed back with --hmr-manifest so the receipt records the bytes
     # the runtime verified, rather than a probe-shaped manifest the product would reject.
     manifest = {
         "schema_version": 1,
         "source_root": str(source),
-        "files": [{"path": path, "sha256": sha256(source / path)} for path in (TARGET, DEPENDENT_PATH)],
+        "files": [],
         "reactive_paths": [TARGET, DEPENDENT_PATH],
         "auto_paths": [TARGET],
         "forced_dependents": {TARGET: [DEPENDENT]},
     }
-    manifest_path = results / "cpu-source-manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
     env = os.environ.copy()
+    for key in ("HMR_VLLM_RUNTIME", "HMR_VLLM_DISABLED", "HMR_VLLM_SKIP", "HMR_VLLM_ENABLE"):
+        env.pop(key, None)
     # `vllm-hmr` sets HMR_VLLM_ENABLE, _RUNTIME, _SOURCE_ROOT and _MANIFEST itself; the
     # packaged runtime reads no other knob. Only vLLM's own variables are set here.
     env.update(
@@ -278,8 +321,6 @@ def run(args: argparse.Namespace) -> None:
     # What the official `vllm` must receive: the argv above plus the CLI's own injection.
     expected_vllm_argv = [*vllm_argv, "--middleware", PACKAGE_MIDDLEWARE]
     launcher = shutil.which("vllm-hmr")
-    if launcher is None:
-        raise FileNotFoundError("the `vllm-hmr` console script is not installed on PATH")
     command = [launcher, *hmr_argv, *vllm_argv]
     process: subprocess.Popen | None = None
     receipt: dict[str, Any] = {
@@ -305,11 +346,9 @@ def run(args: argparse.Namespace) -> None:
         "pyth_on_line_sha": PYTH_SHA,
         "pyth_core_path": args.pyth_core_path,
         "pyth_core_sha256": args.pyth_core_sha256,
-        "target": {
-            "path": TARGET,
-            "function": FUNCTION,
-            "original_sha256": original_target_hash,
-        },
+        # `original_sha256` and `restored_sha256` are filled in once measured, so their absence
+        # in a failed receipt is itself the evidence that the run never got that far.
+        "target": {"path": TARGET, "function": FUNCTION},
         "marker": MARKER,
         "model": args.model,
         "command": command,
@@ -342,7 +381,20 @@ def run(args: argparse.Namespace) -> None:
         "assertions": {},
     }
     try:
-        with log_path.open("w", encoding="utf-8") as output:
+        log_path.touch(exist_ok=False)
+        for relative in (TARGET, DEPENDENT_PATH):
+            if not (source / relative).is_file():
+                raise FileNotFoundError(f"release/source mismatch: runtime target absent: {source / relative}")
+        original_target_hash = sha256(target)
+        receipt["target"]["original_sha256"] = original_target_hash
+        baseline_hashes = verify_release(source, args)
+        receipt["assertions"]["runtime_python_sources_match_installed_release"] = True
+        receipt["assertions"]["imported_pyth_core_matches_receipt"] = True
+        manifest["files"] = [{"path": path, "sha256": baseline_hashes[path]} for path in (TARGET, DEPENDENT_PATH)]
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if launcher is None:
+            raise FileNotFoundError("the `vllm-hmr` console script is not installed on PATH")
+        with log_path.open("a", encoding="utf-8") as output:
             process = subprocess.Popen(
                 command,
                 cwd=source,
@@ -360,8 +412,10 @@ def run(args: argparse.Namespace) -> None:
             raise AssertionError((baseline_status, baseline_payload))
         before = state(base)
         before_identity = identity(before)
-        if not before_identity["workers"]:
-            raise AssertionError("worker identity endpoint returned no workers")
+        if before_identity["api_pid"] != process.pid:
+            raise AssertionError("API PID differs from the launched vllm-hmr process")
+        if not before_identity["workers"] or any(not worker["parameter_sample"] for worker in before_identity["workers"]):
+            raise AssertionError("worker identity endpoint returned no model parameter evidence")
         if not before["api"]["installed"]:
             raise AssertionError("early pyth-on-line injection is not installed in API process")
         if before["api"].get("manifest") != manifest:
@@ -391,7 +445,7 @@ def run(args: argparse.Namespace) -> None:
             mutated_hash = sha256(target)
             if mutated_hash == original_target_hash:
                 raise AssertionError("target bytes did not change")
-            changed_while_mutated = sorted(key for key, digest in python_source_hashes(source).items() if baseline_hashes.get(key) != digest)
+            changed_while_mutated = changed_sources(baseline_hashes, python_source_hashes(source))
             if changed_while_mutated != [TARGET]:
                 raise AssertionError(f"expected exactly one changed Python source, got {changed_while_mutated}")
             mutated_text = target.read_text(encoding="utf-8")
@@ -424,24 +478,22 @@ def run(args: argparse.Namespace) -> None:
             for decision in worker_decisions:
                 if not decision.get("installed") or decision.get("deferred"):
                     raise AssertionError(f"a worker did not run the packaged publication RPC: {decision}")
-                decided = [*decision.get("published", []), *decision.get("rejected", [])]
-                if [record["path"] for record in decided] != [TARGET]:
-                    raise AssertionError(f"a worker decided something other than exactly {TARGET}: {decision}")
-                error = next((item["error"] for item in decision.get("rejected", ()) if item["path"] == TARGET), None)
-                if error is not None and WORKER_OUT_OF_MAP not in error:
-                    raise AssertionError(f"a worker rejected the target for an unexpected reason: {decision}")
+                rejected = decision.get("rejected", [])
+                if decision.get("published") or [record["path"] for record in rejected] != [TARGET] or WORKER_OUT_OF_MAP not in rejected[0].get("error", ""):
+                    raise AssertionError(f"worker must reject the API-only target as outside its module map: {decision}")
             log_after = log_path.read_text(encoding="utf-8", errors="replace")
             marker_line = f"{MARKER} pid={before_identity['api_pid']}"
-            if marker_line not in log_after:
-                raise AssertionError(f"marker missing from correct process log: {marker_line}")
             post_edit_log = log_after[len(before_log) :]
+            if marker_line not in post_edit_log:
+                raise AssertionError(f"marker missing from correct process log: {marker_line}")
             load_evidence_after_edit = load_lines(post_edit_log)
             if load_evidence_after_edit:
                 raise AssertionError(f"model reload evidence appeared after edit: {load_evidence_after_edit}")
 
+            if process.poll() is not None:
+                raise AssertionError("server exited before the smoke completed")
             receipt.update(
                 {
-                    "status": "passed",
                     "baseline": {
                         "http_status": baseline_status,
                         "response_id": baseline_payload.get("id"),
@@ -470,6 +522,7 @@ def run(args: argparse.Namespace) -> None:
                     "marker_log_line": marker_line,
                     "api_process_orig_argv": api_orig_argv,
                     "assertions": {
+                        **receipt["assertions"],
                         "service_started_through_vllm_hmr_console_script": True,
                         "hmr_options_stripped_before_official_vllm_exec": True,
                         "packaged_default_runtime_not_overridden": "--hmr-runtime" not in command,
@@ -492,17 +545,15 @@ def run(args: argparse.Namespace) -> None:
                         "same_api_and_worker_pids": True,
                         "same_model_object_class_and_parameter_pointers": True,
                         "no_model_reload_log_after_edit": True,
-                        "server_process_not_restarted": process.poll() is None,
+                        "server_process_not_restarted": True,
                     },
                 }
             )
         restored_hash = sha256(target)
-        restored_changes = sorted(key for key, digest in python_source_hashes(source).items() if baseline_hashes.get(key) != digest)
+        restored_changes = changed_sources(baseline_hashes, python_source_hashes(source))
         receipt["target"]["restored_sha256"] = restored_hash
-        receipt["changed_python_sources_after_restore"] = restored_changes
         receipt["assertions"]["edited_bytes_restored"] = restored_hash == original_target_hash and not restored_changes
         if not receipt["assertions"]["edited_bytes_restored"]:
-            receipt["status"] = "failed"
             raise AssertionError((original_target_hash, restored_hash, restored_changes))
     except BaseException as exc:
         receipt["status"] = "failed"
@@ -516,21 +567,40 @@ def run(args: argparse.Namespace) -> None:
                 receipt["state_at_failure_error"] = f"{type(probe_error).__name__}: {probe_error}"
         raise
     finally:
-        if process is not None and process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=30)
+        try:
+            if process is not None:
+                stop_server(process)
+        # Wider than `Exception`: `interrupted` turns SIGTERM into KeyboardInterrupt, and `docker
+        # stop` sends a second one when the first is slow. Letting that escape here would skip the
+        # receipt write below, which is the exact failure `interrupted` exists to prevent.
+        # `SystemExit` and `GeneratorExit` stay out: they are control flow this teardown must not
+        # rewrite into a receipt field, and swallowing them strands the interpreter mid-shutdown.
+        except (Exception, KeyboardInterrupt) as exc:
+            receipt["teardown_error"] = f"{type(exc).__name__}: {exc}"
         receipt["server_exit_code_after_teardown"] = None if process is None else process.returncode
         receipt["server_stopped"] = process is None or process.poll() is not None
-        receipt["source_restored"] = sha256(target) == original_target_hash
+        try:
+            restored = python_source_hashes(source)
+            if baseline_hashes is None:
+                # `verify_release` failed, so there is no whole-tree baseline to diff against.
+                receipt["source_restored"] = original_target_hash is not None and restored.get(TARGET) == original_target_hash
+            else:
+                receipt["changed_python_sources_after_restore"] = changed_sources(baseline_hashes, restored)
+                receipt["source_restored"] = not receipt["changed_python_sources_after_restore"]
+        except OSError as exc:
+            receipt["source_restored"] = False
+            receipt["restore_error"] = f"{type(exc).__name__}: {exc}"
+        # `status` starts as "failed" and is promoted only here, from inside `finally`, so a crash
+        # anywhere above leaves it failed by default rather than by an explicit branch that could
+        # be missed. Teardown and restoration count as acceptance criteria, not as afterthoughts:
+        # a run that proved everything and then leaked a process or an edit did not pass.
+        if "error" not in receipt and "teardown_error" not in receipt and receipt["server_stopped"] and receipt["source_restored"] and all(receipt["assertions"].values()):
+            receipt["status"] = "passed"
         receipt["finished_at"] = time.time()
-        receipt_path.write_text(
-            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    if receipt["status"] != "passed":
+        raise AssertionError(f"smoke cleanup failed: {receipt_path}")
 
     print(
         json.dumps(
@@ -560,5 +630,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def interrupted(signum, frame):
+    """`docker stop` sends SIGTERM; without this the default handler skips `finally`, i.e. skips the receipt and the teardown."""
+    del frame
+    raise KeyboardInterrupt(f"received signal {signum}")
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, interrupted)
     run(parse_args())

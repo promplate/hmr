@@ -1,5 +1,3 @@
-# ruff: noqa: E402  # `smoke.py` and `mutations.py` are runner scripts, not an installed package; sys.path must be set up first
-
 from __future__ import annotations
 
 import ast
@@ -12,7 +10,9 @@ from pathlib import Path
 
 EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(EXAMPLE_ROOT))
-from mutations import MutationSet, print_statement
+_mutations = importlib.import_module("mutations")
+MutationSet = _mutations.MutationSet
+print_statement = _mutations.print_statement
 
 spec = importlib.util.spec_from_file_location("vllm_cpu_hmr_smoke", EXAMPLE_ROOT / "smoke.py")
 assert spec and spec.loader
