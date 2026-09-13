@@ -212,7 +212,9 @@ def test_a_duplicate_file_entry_survives_into_the_comparison(source_root: Path, 
 def test_field_order_is_not_scope(source_root: Path, tmp_path: Path):
     payload = build_manifest(source_root).as_dict()
     payload["reactive_paths"] = list(reversed(payload["reactive_paths"]))
-    assert load_manifest(write(tmp_path / "m.json", payload), source_root).reactive_paths == tuple(reversed(REACTIVE_PATHS))
+    path = write(tmp_path / "m.json", payload)
+    loaded = load_manifest(path, source_root)
+    assert loaded.reactive_paths == tuple(reversed(REACTIVE_PATHS))
 
 
 def test_verify_manifest_accepts_a_freshly_built_one(source_root: Path):
