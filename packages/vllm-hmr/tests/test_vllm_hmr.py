@@ -140,6 +140,10 @@ class EnvironmentTests(SourceTreeTestCase):
         env = vllm_hmr.build_env({}, {"PATH": "/usr/bin"}, serve=False)
         self.assertEqual(env, {"PATH": "/usr/bin"})
 
+    def test_non_serve_subcommand_does_not_export_cli_hmr_options(self):
+        env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": "/ignored", "HMR_VLLM_RUNTIME": "ignored:runtime", "HMR_VLLM_MANIFEST": "/ignored.json"}, {"PATH": "/usr/bin"}, serve=False)
+        self.assertEqual(env, {"PATH": "/usr/bin"})
+
     def test_disabled_skips_injection_entirely(self):
         env = vllm_hmr.build_env({"HMR_VLLM_DISABLED": "1"}, {}, serve=True)
         self.assertNotIn("HMR_VLLM_ENABLE", env)

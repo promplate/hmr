@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from vllm_hmr.runtime import bootstrap, scope
 
@@ -51,6 +52,9 @@ class TransactionRollbackTests(unittest.TestCase):
         bootstrap._INSTALLED = False  # noqa: SLF001
         bootstrap._MANIFEST = None  # noqa: SLF001
         bootstrap._PENDING.clear()  # noqa: SLF001
+        bootstrap._WATCHER_FAILED = False  # noqa: SLF001
+        bootstrap._WATCHER_RESTARTS = 0  # noqa: SLF001
+        bootstrap._FILE_DIGESTS.clear()  # noqa: SLF001
         if hasattr(self, "tmp"):
             self.tmp.cleanup()
 
@@ -138,6 +142,30 @@ class TransactionRollbackTests(unittest.TestCase):
         self.assertEqual(retried["published"][0]["forced_dependents_reexecuted"], [scope.DEPENDENT])
         self.assertEqual(provider_module.extract_prompt_components(), "V2", "now on V2 after the successful retry")
         self.assertEqual(consumer_module.add_request(), "V2", "the live callable reaches the new version through its dependent")
+
+    def test_pre_reload_hook_failure_requeues_the_change_and_runs_post_hooks(self):
+        self.provider.write_text(PROVIDER_V1, encoding="utf-8")
+        self.consumer.write_text(CONSUMER_OK, encoding="utf-8")
+        sys.path.insert(0, str(self.root))
+        self.addCleanup(sys.path.remove, str(self.root))
+        self.set_env("HMR_VLLM_SOURCE_ROOT", str(self.root))
+        bootstrap.install_from_env()
+        self.addCleanup(bootstrap._stop_watcher)  # noqa: SLF001
+        provider_module = importlib.import_module("vllm.renderers.inputs.preprocess")
+        importlib.import_module(scope.DEPENDENT)
+        bootstrap._stop_watcher()  # noqa: SLF001
+        with bootstrap._STATE_LOCK:  # noqa: SLF001
+            bootstrap._PENDING.clear()  # noqa: SLF001
+            bootstrap._PENDING[self.provider.resolve()] = {"path": scope.TARGET, "seen_at": 0.0}  # noqa: SLF001
+
+        from reactivity.hmr import hooks
+
+        with patch.object(hooks, "call_pre_reload_hooks", side_effect=RuntimeError("pre hook failed")), patch.object(hooks, "call_post_reload_hooks") as post:
+            with self.assertRaisesRegex(RuntimeError, "pre hook failed"):
+                bootstrap.sync_pending()
+        post.assert_called_once_with()
+        self.assertIn(self.provider.resolve(), bootstrap._PENDING)  # noqa: SLF001
+        self.assertEqual(provider_module.extract_prompt_components(), "V1")
 
 
 if __name__ == "__main__":

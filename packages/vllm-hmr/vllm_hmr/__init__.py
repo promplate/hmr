@@ -208,7 +208,8 @@ def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> 
     so a mistake is a clear CLI error rather than a failure inside vLLM's startup.
     """
     env = dict(base)
-    env.update(options)
+    if serve:
+        env.update(options)
     env.pop("HMR_VLLM_DISABLED", None)
     if is_disabled(options, base) or not serve:
         # Opting out means the child sees a plain environment, not one carrying our marker.
