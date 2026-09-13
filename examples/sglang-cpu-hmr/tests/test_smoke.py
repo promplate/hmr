@@ -39,6 +39,8 @@ from smoke import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+_SUPPORTS_SIGKILL = hasattr(signal, "SIGKILL")
+
 
 @pytest.fixture
 def source_root(tmp_path: Path) -> Path:
@@ -230,6 +232,7 @@ def test_teardown_tolerates_a_group_that_is_already_gone(monkeypatch: pytest.Mon
     assert waits == []  # nothing left to reap
 
 
+@pytest.mark.skipif(not _SUPPORTS_SIGKILL, reason="SIGKILL not available on Windows")
 def test_teardown_escalates_to_sigkill_when_sigterm_times_out(monkeypatch: pytest.MonkeyPatch):
     signals: list[int] = []
     monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number), raising=False)
@@ -242,6 +245,7 @@ def test_teardown_escalates_to_sigkill_when_sigterm_times_out(monkeypatch: pytes
     assert signals == [signal.SIGTERM, signal.SIGKILL]
 
 
+@pytest.mark.skipif(not _SUPPORTS_SIGKILL, reason="SIGKILL not available on Windows")
 def test_teardown_tolerates_the_group_dying_between_sigterm_timeout_and_sigkill(monkeypatch: pytest.MonkeyPatch):
     calls: list[int] = []
 
@@ -278,6 +282,7 @@ def test_teardown_returns_none_on_clean_exit(monkeypatch: pytest.MonkeyPatch):
     assert result is None
 
 
+@pytest.mark.skipif(not _SUPPORTS_SIGKILL, reason="SIGKILL not available on Windows")
 def test_teardown_returns_an_error_when_sigkill_times_out(monkeypatch: pytest.MonkeyPatch):
     signals: list[int] = []
     monkeypatch.setattr(os, "killpg", lambda _pid, number: signals.append(number), raising=False)
@@ -298,6 +303,7 @@ def test_teardown_returns_an_error_on_unexpected_exception(monkeypatch: pytest.M
     assert "PermissionError" in result
 
 
+@pytest.mark.skipif(not _SUPPORTS_SIGKILL, reason="SIGKILL not available on Windows")
 def test_smoke_writes_teardown_error_to_receipt_on_sigkill_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """End-to-end: a process that survives SIGKILL must mark the receipt as failed and record the error."""
     import smoke
