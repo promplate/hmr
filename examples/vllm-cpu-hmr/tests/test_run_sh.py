@@ -8,11 +8,14 @@ for real is bash: the trap ordering, `set -o pipefail` against `tee`, and the ci
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
+import textwrap
 import time
 import unittest
+from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -100,6 +103,90 @@ class RunScriptTests(unittest.TestCase):
         self.assertTrue(receipt["container_removed"])
         self.assertEqual(self.containers(), [])
 
+    def test_log_failure_preserves_the_probe_exit_code(self):
+        (self.bin / "tee").unlink()
+        (self.bin / "tee").write_text('#!/bin/bash\n/usr/bin/tee "$@"\n[[ "${1:-}" != -a ]] || exit 6\n', encoding="utf-8")
+        (self.bin / "tee").chmod(0o755)
+        completed = self.run_script(MOCK_RUN_EXIT="3")
+        self.assertEqual(completed.returncode, 6, completed.stderr)
+        receipt = self.receipt()
+        self.assertEqual(receipt["exit_code"], 6)
+        self.assertEqual(receipt["run_exit_code"], 3)
+        self.assertTrue(receipt["container_removed"])
+        self.assertFalse(receipt["cleanup_failed"])
+
+    def assert_signal_window(self, point: str, signum: str, expected: int):
+        hook = self.root / "signal-window.bash"
+        hook.write_text(
+            textwrap.dedent("""\
+            R17_ROOT=$BASHPID R17_FIRED=0
+            trap() {
+              builtin trap "$@"
+              if [[ $BASHPID == "$R17_ROOT" && $R17_FIRED == 0 ]] && {
+                [[ $R17_POINT == teardown && $1 == - && ${2:-} == EXIT ]] ||
+                [[ $R17_POINT == armed && $1 == cleanup && ${2:-} == EXIT ]];
+              }; then
+                R17_FIRED=1
+                printf '%s\\n' "$R17_POINT" >"$MOCK_STATE_DIR/signal-fired"
+                kill -s "$R17_SIGNAL" "$$"
+              fi
+            }
+            r17_debug() {
+              local command=$1
+              [[ $BASHPID == "$R17_ROOT" ]] || return 0
+              if [[ $R17_FIRED == 0 && $R17_POINT == launch && $command == 'RUN_PID=$!' ]]; then
+                R17_FIRED=1
+                for attempt in {1..200}; do
+                  [[ -s $MOCK_STATE_DIR/worker.pid ]] && break
+                  sleep 0.01
+                done
+                printf '%s\\n' "$R17_POINT" >"$MOCK_STATE_DIR/signal-fired"
+                kill -s "$R17_SIGNAL" "$$"
+              fi
+              return 0
+            }
+            set -T
+            trap 'r17_debug "$BASH_COMMAND"' DEBUG
+            """),
+            encoding="utf-8",
+        )
+        env = self.env(BASH_ENV=str(hook), R17_POINT=point, R17_SIGNAL=signum, MOCK_RUN_WORKER="1" if point == "launch" else "0", MOCK_RUN_SLEEP="30" if point == "launch" else "0")
+        process = subprocess.Popen(["bash", str(RUN_SH)], cwd=self.root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(process.returncode, expected, stderr)
+            self.assertEqual((self.state / "signal-fired").read_text().strip(), point)
+            receipt = self.receipt()
+            self.assertEqual(receipt["exit_code"], expected)
+            self.assertEqual(self.containers(), [])
+            if point == "launch":
+                self.assertEqual(receipt["run_exit_code"], 143)
+                self.assertFalse(receipt["cleanup_failed"])
+                worker = int((self.state / "worker.pid").read_text())
+                stat = Path(f"/proc/{worker}/stat")
+                self.assertTrue(not stat.exists() or stat.read_text().split()[2] == "Z", "probe group survived the receipt")
+            elif point == "armed":
+                self.assertIsNone(receipt["run_exit_code"])
+                self.assertFalse(receipt["container_created"])
+        finally:
+            for pid in (int((self.state / "probe.pid").read_text()) if (self.state / "probe.pid").exists() else None, process.pid):
+                if pid is not None:
+                    with suppress(ProcessLookupError):
+                        os.killpg(pid, signal.SIGKILL)
+            process.communicate(timeout=5)
+
+    def test_signal_after_exit_trap_records_matching_status(self):
+        self.assert_signal_window("armed", "TERM", 143)
+
+    def test_sigint_after_exit_trap_records_matching_status(self):
+        self.assert_signal_window("armed", "INT", 130)
+
+    def test_signal_before_probe_pid_assignment_reaps_the_group(self):
+        self.assert_signal_window("launch", "TERM", 143)
+
+    def test_signal_during_trap_disarming_cannot_abort_cleanup(self):
+        self.assert_signal_window("teardown", "TERM", 0)
+
     def test_interrupted_rm_is_cleaned_up_by_cid(self):
         completed = self.run_script(MOCK_RUN_EXIT="4", MOCK_RUN_LEAVE_CONTAINER="1")
         self.assertEqual(completed.returncode, 4, completed.stderr)
@@ -122,6 +209,16 @@ class RunScriptTests(unittest.TestCase):
         self.assertEqual(receipt["run_exit_code"], 0)
         self.assertFalse(receipt["container_removed"])
         self.assertTrue(receipt["cleanup_failed"])
+        self.assertEqual(self.containers(), [f"container-{receipt['container_id']}.json"])
+
+    def test_container_listing_failure_is_reported_not_as_removed(self):
+        completed = self.run_script(MOCK_RUN_LEAVE_CONTAINER="1", MOCK_LS_FAILS="1")
+        receipt = self.receipt()
+        self.assertTrue(receipt["container_created"])
+        self.assertFalse(receipt["container_removed"], receipt)
+        self.assertTrue(receipt["cleanup_failed"])
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        self.assertEqual(receipt["run_exit_code"], 0)
         self.assertEqual(self.containers(), [f"container-{receipt['container_id']}.json"])
 
     def test_missing_base_image_records_its_own_stage(self):
@@ -148,7 +245,7 @@ class RunScriptTests(unittest.TestCase):
     def test_sigterm_during_the_probe_still_writes_a_receipt(self):
         # Started directly rather than through `run_script`: the signal has to arrive while the
         # probe is still running, which means not waiting for the script to finish first.
-        env = self.env(MOCK_RUN_SLEEP="30", MOCK_RUN_LEAVE_CONTAINER="1")
+        env = self.env(MOCK_RUN_SLEEP="3", MOCK_RUN_LEAVE_CONTAINER="1")
         process = subprocess.Popen(["bash", str(RUN_SH)], cwd=self.root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         cid_path = self.results / "cpu-container.cid"
         deadline = time.monotonic() + 30
@@ -157,7 +254,12 @@ class RunScriptTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertTrue(cid_path.read_text().strip(), "probe never wrote its cid")
         process.send_signal(signal.SIGTERM)
-        process.communicate(timeout=60)
+        try:
+            # Finishing the shell alone is insufficient: an orphaned docker client or tee keeps
+            # these pipes open and may still write after the receipt claims teardown is complete.
+            process.communicate(timeout=1)
+        finally:
+            process.communicate(timeout=10)
         # 143 is SIGTERM's conventional shell status, which the TERM trap sets deliberately;
         # the receipt exists because the trap was armed before anything could fail.
         self.assertEqual(process.returncode, 143)
@@ -183,6 +285,54 @@ class RunScriptTests(unittest.TestCase):
                 self.assertEqual(sorted(p.name for p in self.results.iterdir()), [artifact])
                 self.assertEqual((self.state / "calls.log").read_text() if (self.state / "calls.log").exists() else "", "")
                 path.unlink()
+
+    def assert_surviving_worker_is_cleaned_up(self, *, terminate: bool, leader_sleep: str = "0"):
+        process = subprocess.Popen(
+            ["bash", str(RUN_SH)],
+            cwd=self.root,
+            env=self.env(MOCK_RUN_WORKER="1", MOCK_RUN_SLEEP=leader_sleep),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        leader = None
+        try:
+            deadline = time.monotonic() + 10
+            worker_path = self.state / "worker.pid"
+            while not worker_path.exists() or not worker_path.read_text().strip():
+                self.assertLess(time.monotonic(), deadline, "mock worker never started")
+                time.sleep(0.02)
+            leader = int((self.state / "probe.pid").read_text())
+            worker = int(worker_path.read_text())
+            if leader_sleep == "0":
+                while Path(f"/proc/{leader}").exists():
+                    self.assertLess(time.monotonic(), deadline, "probe leader never exited")
+                    time.sleep(0.02)
+            if terminate:
+                process.send_signal(signal.SIGTERM)
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(process.returncode, 143 if terminate else 0, stderr)
+            worker_stat = Path(f"/proc/{worker}/stat")
+            self.assertTrue(not worker_stat.exists() or worker_stat.read_text().split()[2] == "Z", "worker survived cleanup")
+            self.assertTrue(self.receipt()["container_removed"])
+            self.assertEqual(self.containers(), [])
+        finally:
+            # The pre-fix runner hangs; kill only groups created by this test before draining pipes.
+            for pid in (leader, process.pid):
+                if pid is not None:
+                    with suppress(ProcessLookupError):
+                        os.killpg(pid, signal.SIGKILL)
+            process.communicate(timeout=5)
+
+    def test_exited_probe_with_surviving_worker_does_not_block_tee(self):
+        self.assert_surviving_worker_is_cleaned_up(terminate=False)
+
+    def test_sigterm_after_probe_exits_kills_surviving_group(self):
+        self.assert_surviving_worker_is_cleaned_up(terminate=True)
+
+    def test_sigterm_escalates_for_term_resistant_probe_group(self):
+        self.assert_surviving_worker_is_cleaned_up(terminate=True, leader_sleep="30")
 
     def test_dangling_artifact_symlink_is_also_refused(self):
         self.results.mkdir(parents=True)

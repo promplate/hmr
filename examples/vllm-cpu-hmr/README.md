@@ -6,7 +6,7 @@ compiled kernels, CUDA Graphs, or model weights are safe to replace in place.
 
 ## Run
 
-Run this Linux-host harness with Docker, Bash, and `flock` (util-linux) available. From the repository root:
+Run this Linux-host harness with Docker, Bash 4.4 or later, and `flock` (util-linux) available. From the repository root:
 
 ```bash
 docker pull vllm/vllm-openai-cpu:v0.28.0-x86_64

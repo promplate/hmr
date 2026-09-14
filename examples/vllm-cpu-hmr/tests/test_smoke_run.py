@@ -69,6 +69,9 @@ class SmokeRunTests(unittest.TestCase):
         ).Popen
         # `os.killpg` is POSIX-only, so `create=True` lets the patch succeed on Windows where it doesn't exist.
         self.killpg = self.enterContext(patch.object(smoke.os, "killpg", create=True))
+        self.killpg.side_effect = self.group_probe
+        self.enterContext(patch.object(smoke.os, "waitpid", side_effect=ChildProcessError))
+        self.enterContext(patch.object(smoke.os, "WNOHANG", 1, create=True))
         self.enterContext(patch.object(smoke.shutil, "which", return_value="/trusted/vllm-hmr"))
         self.enterContext(patch.object(smoke, "wait_ready"))
         self.enterContext(patch.object(smoke, "state", side_effect=self.snapshot))
@@ -95,6 +98,10 @@ class SmokeRunTests(unittest.TestCase):
         del timeout  # keyword name must match Popen.wait(timeout=...), which smoke.py calls
         self.process.returncode = -15  # SIGTERM; negative convention matches POSIX waitpid's killed-by-signal return
         return self.process.returncode
+
+    def group_probe(self, _pid, sig):
+        if sig == 0:
+            raise ProcessLookupError
 
     def complete(self, base, model):
         del base, model
@@ -142,9 +149,8 @@ class SmokeRunTests(unittest.TestCase):
         self.assertTrue(receipt["server_stopped"])
         self.assertEqual(smoke.python_source_hashes(self.source), self.before_baseline)
         self.assertEqual(self.completions.call_count, 2)
-        # SIGTERM alone brought the leader down, so the group must not be SIGKILLed: escalating
-        # anyway would cut off an engine/worker still flushing its own teardown evidence.
-        self.assertEqual(self.killpg.call_args_list, [call(self.process.pid, signal.SIGTERM)])
+        # The group is confirmed empty after TERM, so no escalation is needed.
+        self.assertEqual(self.killpg.call_args_list, [call(self.process.pid, signal.SIGTERM), call(self.process.pid, 0)])
 
     def test_rejects_worker_claiming_api_only_publication(self):
         self.decision.update(published=[{"path": smoke.TARGET}], rejected=[])
@@ -206,14 +212,44 @@ class SmokeRunTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "server exited"):
             smoke.run(self.args)
         self.assertEqual(self.receipt()["status"], "failed")
-        # A dead leader does not mean an empty group, so the group is still signalled; the
-        # leader reaped without a timeout, so there is nothing to escalate against.
-        self.assertEqual(self.killpg.call_args_list, [call(self.process.pid, signal.SIGTERM)])
+        # A dead leader does not mean an empty group: still signal and check the group.
+        self.assertEqual(self.killpg.call_args_list, [call(self.process.pid, signal.SIGTERM), call(self.process.pid, 0)])
+
+    def test_worker_outliving_leader_gets_grace_then_sigkill(self):
+        elapsed = 0.0
+        worker_alive = True
+
+        def sleep(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        def killpg(pid, sig):
+            nonlocal worker_alive
+            self.assertEqual(pid, self.process.pid)
+            # Windows aliases the import-only SIGKILL fallback to SIGTERM. Distinguish
+            # the initial TERM from escalation by call order, not by distinct numbers.
+            if self.killpg.call_count == 1:
+                self.assertEqual(sig, signal.SIGTERM)
+            elif sig == smoke.SIGKILL:
+                self.assertGreaterEqual(elapsed, 60, "worker must get the full TERM grace period")
+                worker_alive = False
+            elif not worker_alive:
+                raise ProcessLookupError
+
+        self.killpg.side_effect = killpg
+        with patch.object(smoke, "time", SimpleNamespace(monotonic=lambda: elapsed, sleep=sleep)):
+            smoke.stop_server(self.process)
+        self.assertFalse(worker_alive, "stop_server returned while the worker was still alive")
+        self.assertEqual(self.killpg.call_args_list[-1], call(self.process.pid, 0))
 
     def test_missing_process_group_does_not_lose_receipt(self):
         self.killpg.side_effect = ProcessLookupError
         smoke.run(self.args)
         self.assertEqual(self.receipt()["status"], "passed")
+
+    def test_worker_grace_period_with_windows_signal_alias(self):
+        with patch.object(smoke, "SIGKILL", signal.SIGTERM):
+            self.test_worker_outliving_leader_gets_grace_then_sigkill()
 
     def test_teardown_timeout_records_failure_and_nonzero_outcome(self):
         self.process.wait.side_effect = subprocess.TimeoutExpired("vllm-hmr", 30)
@@ -244,6 +280,86 @@ class SmokeRunTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "failed")
         self.assertIn("KeyboardInterrupt", receipt["teardown_error"])
         self.assertTrue(receipt["source_restored"])
+
+    def test_keyboard_interrupt_after_reaping_leader_still_kills_workers(self):
+        worker_alive = True
+
+        def killpg(_pid, sig):
+            nonlocal worker_alive
+            if sig != 0 and self.killpg.call_count > 1:
+                self.assertEqual(sig, smoke.SIGKILL)
+                worker_alive = False
+            if sig == 0 and not worker_alive:
+                raise ProcessLookupError
+
+        def interrupted_wait(timeout):
+            self.wait(timeout)
+            if self.process.wait.call_count == 1:
+                raise KeyboardInterrupt("leader reaped")
+            return self.process.returncode
+
+        self.process.wait.side_effect = interrupted_wait
+        self.killpg.side_effect = killpg
+        with self.assertRaises(AssertionError):
+            smoke.run(self.args)
+        self.assertIn(call(self.process.pid, smoke.SIGKILL), self.killpg.call_args_list)
+        self.assertFalse(worker_alive)
+        self.assertIn("KeyboardInterrupt", self.receipt()["teardown_error"])
+        self.assertTrue(self.receipt()["source_restored"])
+
+    def assert_finalization_survives_signals(self, phase: str):
+        previous = {sig: signal.signal(sig, smoke.interrupted) for sig in (signal.SIGINT, signal.SIGTERM)}
+        for sig, handler in previous.items():
+            self.addCleanup(signal.signal, sig, handler)
+        complete = self.complete
+
+        def fail_after_edit(base, model):
+            if self.completions.call_count == 2:
+                signal.raise_signal(signal.SIGTERM)
+            return complete(base, model)
+
+        self.completions.side_effect = fail_after_edit
+        delivered = []
+        # The wait hook fires after reaping the leader. Other hooks fire
+        # before restoration or evidence writes, while a second signal could still abort them.
+        owner, attribute, original, ready = {
+            "restore": (Path, "write_bytes", Path.write_bytes, lambda path, *_: os.path.samefile(path, self.source / smoke.TARGET)),
+            "hash": (smoke, "python_source_hashes", smoke.python_source_hashes, lambda _: self.process.returncode is not None),
+            "receipt": (Path, "write_text", Path.write_text, lambda path, *_, **__: path.name == "cpu-smoke-receipt.json"),
+            "wait": (self.process.wait, "side_effect", self.wait, lambda **_: True),
+        }[phase]
+
+        def inject(*args, **kwargs):
+            result = original(*args, **kwargs) if phase == "wait" else None
+            if ready(*args, **kwargs):
+                delivered.append(phase)
+                signal.raise_signal(signal.SIGTERM)
+                signal.raise_signal(signal.SIGINT)
+            return result if phase == "wait" else original(*args, **kwargs)
+
+        with patch.object(owner, attribute, inject), self.assertRaisesRegex(KeyboardInterrupt, "received signal"):
+            smoke.run(self.args)
+        for sig in previous:
+            self.assertIs(signal.getsignal(sig), smoke.interrupted, "run must restore its caller's signal handlers")
+        self.assertEqual(delivered, [phase])
+        receipt = self.receipt()
+        self.assertEqual(receipt["status"], "failed")
+        self.assertTrue(receipt["source_restored"])
+        self.assertTrue(receipt["server_stopped"])
+        self.assertNotIn("teardown_error", receipt)
+        self.assertEqual(smoke.python_source_hashes(self.source), self.before_baseline)
+
+    def test_second_signal_during_source_restore_is_ignored(self):
+        self.assert_finalization_survives_signals("restore")
+
+    def test_second_signal_during_restore_hashing_is_ignored(self):
+        self.assert_finalization_survives_signals("hash")
+
+    def test_second_signal_during_receipt_write_is_ignored(self):
+        self.assert_finalization_survives_signals("receipt")
+
+    def test_second_signal_after_leader_reaped_is_ignored(self):
+        self.assert_finalization_survives_signals("wait")
 
     def test_primary_failure_survives_teardown_error(self):
         self.completions.side_effect = AssertionError("primary failure")
@@ -295,9 +411,14 @@ class SmokeRunTests(unittest.TestCase):
             with self.subTest(artifact=artifact):
                 path = self.results / artifact
                 path.write_bytes(b"existing evidence")
-                with self.assertRaises(FileExistsError):
-                    smoke.run(self.args)
-                self.assertEqual(path.read_bytes(), b"existing evidence")
+                try:
+                    with self.assertRaises(FileExistsError) as caught:
+                        smoke.run(self.args)
+                    self.assertIn(artifact, str(caught.exception))
+                    self.assertEqual(path.read_bytes(), b"existing evidence")
+                    self.assertEqual(sorted(p.name for p in self.results.iterdir()), [artifact])
+                finally:
+                    path.unlink()
         self.popen.assert_not_called()
 
     def test_environment_cannot_override_default_runtime(self):

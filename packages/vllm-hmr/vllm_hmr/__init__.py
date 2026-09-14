@@ -164,7 +164,7 @@ def inject_vllm_flags(forwarded: list[str]) -> list[str]:
     extra: list[str] = []
     if not has_flag(forwarded, "--middleware"):
         extra += ["--middleware", MIDDLEWARE]
-    if not has_flag(forwarded, "--worker-extension-cls"):
+    if not (has_flag(forwarded, "--worker-extension-cls") or has_flag(forwarded, "--worker_extension_cls")):
         extra += ["--worker-extension-cls", WORKER_EXTENSION]
     return [*head, *extra, *tail]
 
@@ -191,11 +191,12 @@ def deactivate(env: dict[str, str]) -> dict[str, str]:
     """
     env.pop("HMR_VLLM_ENABLE", None)
     if "PYTHONPATH" in env:
-        # Exact-match filtering, so a user entry that merely contains our path is untouched. An
-        # empty result means the shim was the only entry, i.e. we put it there: drop the variable.
-        remaining = os.pathsep.join(entry for entry in env["PYTHONPATH"].split(os.pathsep) if not _same_path(entry, SHIM_DIR))
-        env["PYTHONPATH"] = remaining
-        if not remaining:
+        remaining = [entry for entry in env["PYTHONPATH"].split(os.pathsep) if not entry or not _same_path(entry, SHIM_DIR)]
+        if remaining:
+            # CPython ignores PYTHONPATH="", but an empty entry in "shim:" means cwd. Spell
+            # that surviving entry as "."; an originally empty variable stays untouched.
+            env["PYTHONPATH"] = os.pathsep.join(remaining) or (os.curdir if env["PYTHONPATH"] else "")
+        else:
             del env["PYTHONPATH"]
     return env
 
@@ -242,7 +243,9 @@ def build_env(options: dict[str, str], base: dict[str, str], *, serve: bool) -> 
     env["HMR_VLLM_ENABLE"] = "1"
     shim = str(SHIM_DIR)
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = shim if not existing else existing if any(_same_path(entry, SHIM_DIR) for entry in existing.split(os.pathsep)) else f"{shim}{os.pathsep}{existing}"
+    # An inherited shim may follow a user sitecustomize; it must win discovery so both run.
+    remaining = [entry for entry in existing.split(os.pathsep) if not entry or not _same_path(entry, SHIM_DIR)] if existing else []
+    env["PYTHONPATH"] = os.pathsep.join([shim, *remaining])
     return env
 
 

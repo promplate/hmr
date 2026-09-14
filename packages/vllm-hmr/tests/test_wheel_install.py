@@ -186,6 +186,31 @@ class WheelInstallTests(unittest.TestCase):
         self.assertIn("vllm/renderers/inputs/preprocess.py", done.stdout)
         self.assertIn("vllm/v1/engine/async_llm.py", done.stdout)
 
+    def test_user_sitecustomize_errors_keep_cpython_semantics_and_packaged_hmr(self):
+        source = self.source_tree()
+        shim = self.site_packages / "vllm_hmr" / "_sitecustomize"
+        user = Path(self.tmp.name) / "raising-site"
+        user.mkdir()
+        body = "from vllm_hmr.runtime.bootstrap import state; s = state(); assert s['installed'] and s['watcher_alive']; print('body continued')"
+        for error, warning in (("RuntimeError('user hook failed')", "RuntimeError: user hook failed"), ("ImportError('absent', name='sitecustomize')", "")):
+            with self.subTest(error=error):
+                (user / "sitecustomize.py").write_text(f"raise {error}\n", encoding="utf-8")
+                done = run(
+                    str(self.python),
+                    "-c",
+                    body,
+                    env=clean_env(
+                        PYTHONPATH=os.pathsep.join([str(shim), str(user)]), HMR_VLLM_ENABLE="1", HMR_VLLM_SOURCE_ROOT=str(source), HMR_VLLM_RUNTIME="vllm_hmr.runtime.bootstrap:install_from_env"
+                    ),
+                )
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertIn("body continued", done.stdout)
+                if warning:
+                    self.assertIn("Error in sitecustomize", done.stderr)
+                    self.assertIn(warning, done.stderr)
+                else:
+                    self.assertEqual(done.stderr, "")
+
     def test_site_packages_install_without_source_root_fails_with_guidance(self):
         stub_dir = self.stub_vllm_dir("#!/bin/sh\nexit 0\n")
         done = run(str(self.script), "serve", "m", env=clean_env(PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}"))
@@ -272,7 +297,7 @@ class WheelInstallTests(unittest.TestCase):
         """
         done = run(str(self.python), "-c", "import vllm_hmr; print(vllm_hmr.__file__)")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertTrue(os.path.samefile(done.stdout.strip(), self.site_packages / "vllm_hmr" / "__init__.py"))
+        self.assertTrue(Path(done.stdout.strip()).samefile(self.site_packages / "vllm_hmr" / "__init__.py"))
 
 
 class CleanEnvTests(unittest.TestCase):

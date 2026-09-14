@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import sys
 from importlib import import_module
+from importlib.machinery import PathFinder
+from importlib.util import module_from_spec
 from pathlib import Path
 
 SKIP_MARKER = "HMR_VLLM_SKIP"  # set by a process that must not inherit injection (short-lived vLLM probes)
@@ -53,26 +55,42 @@ def install_from_env(env: dict[str, str] | None = None) -> object | None:
     return load_runtime(env["HMR_VLLM_RUNTIME"])()
 
 
+def _next_sitecustomize_spec(shim_file: str, path: list[str] | None = None):
+    """Let CPython select packages, files and namespace portions in its normal order."""
+    shim_dir = Path(shim_file).resolve().parent
+    search_path = [entry for entry in (sys.path if path is None else path) if Path(entry).resolve() != shim_dir]
+    return PathFinder.find_spec("sitecustomize", search_path)
+
+
+def _spec_path(spec) -> Path:
+    location = spec.origin or next(iter(spec.submodule_search_locations or ()))
+    return Path(location).resolve()
+
+
 def next_sitecustomize(shim_file: str, path: list[str] | None = None) -> Path | None:
     """Find the `sitecustomize` this shim shadowed, if the environment had one."""
-    shim_dir = Path(shim_file).resolve().parent
-    for entry in sys.path if path is None else path:
-        if not entry:
-            continue
-        candidate = Path(entry).resolve()
-        if candidate == shim_dir:
-            continue
-        for target in (candidate / "sitecustomize.py", candidate / "sitecustomize" / "__init__.py"):
-            if target.is_file():
-                return target
+    if spec := _next_sitecustomize_spec(shim_file, path):
+        return _spec_path(spec)
     return None
 
 
 def chain_to_next_sitecustomize(shim_file: str) -> Path | None:
     """Execute the shadowed `sitecustomize` in its own namespace before we install."""
-    target = next_sitecustomize(shim_file)
-    if target is None:
+    spec = _next_sitecustomize_spec(shim_file)
+    if spec is None:
         return None
-    code = compile(target.read_text(encoding="utf-8"), str(target), "exec")
-    exec(code, {"__file__": str(target), "__name__": "sitecustomize"})
-    return target
+    module = module_from_spec(spec)
+    previous = sys.modules.get("sitecustomize")
+    # Keep files and packages registered: deferred imports and attribute access must see
+    # the user's module. The shim still finishes executing in its own namespace.
+    sys.modules["sitecustomize"] = module
+    try:
+        if spec.loader is not None:
+            spec.loader.exec_module(module)
+    except BaseException:
+        if previous is None:
+            sys.modules.pop("sitecustomize", None)
+        else:
+            sys.modules["sitecustomize"] = previous
+        raise
+    return _spec_path(spec)
