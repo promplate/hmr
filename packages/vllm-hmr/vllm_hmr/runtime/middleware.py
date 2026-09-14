@@ -8,12 +8,14 @@ always served by one consistent version of the code.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 from . import telemetry
-from .bootstrap import sync_pending
+from .bootstrap import requeue_for_retry, sync_pending
 
 DEFAULT_RPC_TIMEOUT_S = 30.0
+NEVER_LOADED = "not loaded from this source root"  # the one worker rejection that is not version skew
 
 
 def rpc_timeout() -> float:
@@ -54,6 +56,26 @@ def _watcher_problem(where: str, result: dict) -> dict | None:
     return {"where": where, "error": error, "exhausted": exhausted}
 
 
+def _version_skew_problems(worker_sync) -> list[dict]:
+    """Worker rejections that signal API/worker version skew: the worker loaded the module from the managed source root but failed to reload it.
+
+    `not loaded from this source root` is the one rejection that is not skew: that worker never imported the HMR-managed module, so it cannot be running a stale version.
+    """
+    if not worker_sync:
+        return []
+    skew: list[dict] = []
+    for rank, result in enumerate(worker_sync):
+        if not isinstance(result, dict):
+            continue
+        for item in result.get("rejected", ()):
+            if not isinstance(item, dict):
+                continue
+            error = item.get("error", "")
+            if NEVER_LOADED not in str(error):
+                skew.append({"where": f"worker[{rank}]", "path": item.get("path"), "error": error})
+    return skew
+
+
 def _failures(local_sync, worker_sync) -> list[dict]:
     """Every reason this boundary did not publish everywhere it tried to, for telemetry.
 
@@ -74,7 +96,10 @@ def _failures(local_sync, worker_sync) -> list[dict]:
 
 
 class HMRBoundaryMiddleware:
-    """Injected by the `vllm-hmr` CLI as `--middleware vllm_hmr.runtime.middleware.HMRBoundaryMiddleware`."""
+    """Injected by the `vllm-hmr` CLI as `--middleware vllm_hmr.runtime.middleware.HMRBoundaryMiddleware`.
+
+    Publishes changes at request boundaries and enforces request consistency: one request uses one version of the code.
+    """
 
     def __init__(self, app):
         self.app = app
@@ -123,6 +148,36 @@ class HMRBoundaryMiddleware:
             if rpc_error is not None:
                 problems.append({"where": "workers", "error": rpc_error})
             telemetry.event("request_boundary", path=scope.get("path", ""), local_sync=local_sync, worker_sync=worker_sync, problems=problems)
+
+            # A loaded-module rejection is worker-side evidence of a version split, regardless of
+            # whether this API process had a local pending item in the same boundary. A failed RPC
+            # is also unsafe on an inference boundary: it did not confirm that every worker reached
+            # the same version, so fail closed rather than serving through an unknown split.
+            published = local_sync.get("published") or []
+            skew = _version_skew_problems(worker_sync) if scope.get("path", "").startswith("/v1/") else []
+            if rpc_error is not None and scope.get("path", "").startswith("/v1/"):
+                skew.append({"where": "workers", "error": rpc_error})
+            if skew:
+                # Re-queued before responding: `sync_pending` advanced the rescan baseline for what
+                # it published here, so nothing on disk would re-announce these files and the
+                # workers would stay on the old code for the lifetime of the process.
+                requeued = requeue_for_retry(published)
+                telemetry.event("inference_blocked", path=scope.get("path", ""), reason="worker_publication_incomplete", skew=skew, requeued=requeued)
+                body = json.dumps(
+                    {
+                        "error": {
+                            "message": "HMR published a source change in the API process that the workers did not confirm; refusing to serve this request across two versions of the same module.",
+                            "type": "hmr_worker_publication_incomplete",
+                            "code": None,
+                            "param": None,
+                        },
+                        "hmr": {"skew": skew, "requeued": requeued},
+                    }
+                ).encode()
+                await send({"type": "http.response.start", "status": 503, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return None
+
             telemetry.scope_enter()  # inside the lock: the next request must see this request as in flight
 
         try:

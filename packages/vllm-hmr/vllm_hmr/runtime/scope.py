@@ -191,6 +191,6 @@ def syntax_preflight(path: Path) -> tuple[bool, str | None]:
     """Never hand a half-written file to the loader: a SyntaxError there is unrecoverable."""
     try:
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError, UnicodeError) as exc:
+    except (OSError, SyntaxError, UnicodeError, ValueError) as exc:  # ValueError covers ast.parse's NUL-byte rejection
         return False, f"{type(exc).__name__}: {exc}"
     return True, None

@@ -66,7 +66,7 @@ Two runtime-only controls are environment variables rather than CLI arguments:
 2. It `execve`s the official `vllm`. Because the shim sits on `PYTHONPATH`, CPython imports it during `site` initialization — before vLLM or torch. Any `sitecustomize` it shadows is chained first, so environments that rely on their own keep working.
 3. The shim invokes the runtime, which validates the manifest, installs the [pyth-on-line](https://github.com/promplate/pyth-on-line) reactive import hook for the in-scope files only, and starts a watcher.
 4. Subprocesses inherit the environment, so workers get the same early injection. vLLM's short-lived model-registry inspector is detected and left watcher-free; `HMR_VLLM_SKIP=1` suppresses injection for any process that must not have it.
-5. On a file change the watcher only queues the change. Publication happens in the middleware, between requests: the API process reloads, then asks the workers to do the same. A request in flight blocks publication, so no single request sees two versions of the same module. Request boundaries are serialised against each other, so two requests arriving together cannot both decide that nothing is in flight; the requests themselves stay concurrent.
+5. On a file change the watcher only queues the change. Publication happens in the middleware, between requests: the API process reloads, then asks the workers to do the same via RPC on eligible inference request boundaries (paths beginning with `/v1/`). Health and metrics requests do not fan out to workers. A request in flight blocks publication, so no single request sees two versions of the same module. Request boundaries are serialised against each other, so two requests arriving together cannot both decide that nothing is in flight; the requests themselves stay concurrent.
 
 ## Scope
 
@@ -83,7 +83,7 @@ If a target or forced dependent raises while reloading, the runtime restores the
 
 ## Capability limits
 
-The evidence behind this package is one smoke test: vLLM **0.28.0+cpu** on the official `vllm/vllm-openai-cpu:v0.28.0-x86_64` image, single process, one request path. See [`examples/vllm-cpu-hmr`](../../examples/vllm-cpu-hmr), which launches through this CLI and asserts that the target function is replaced while API and worker PIDs, the model object, and its parameter pointers stay unchanged.
+The evidence behind this package is one smoke test: vLLM **0.28.0+cpu** on the official `vllm/vllm-openai-cpu:v0.28.0-x86_64` image, single server instance with API and worker processes, one request path. See [`examples/vllm-cpu-hmr`](../../examples/vllm-cpu-hmr), which launches through this CLI and asserts that the target function is replaced while API and worker PIDs, the model object, and its parameter pointers stay unchanged.
 
 Verified:
 

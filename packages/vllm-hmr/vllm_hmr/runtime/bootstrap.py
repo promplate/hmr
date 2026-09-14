@@ -269,6 +269,9 @@ def _recover_watcher() -> dict[str, Any]:
             if budget <= _WATCHER_RESTARTS:
                 # Terminal: the failure has outlived its budget, so this stays fail-closed rather
                 # than restarting once per request against a cause that is evidently still true.
+                # Recorded on the flag too: a thread that died without reporting leaves
+                # `_WATCHER_FAILED` False, and `sync_pending`/`state()` both read terminality off it.
+                _WATCHER_FAILED = True
                 return {"attempted": False, "recovered": False, "exhausted": True, "restarts": _WATCHER_RESTARTS, "missed": []}
             _WATCHER_RESTARTS += 1
             attempt = _WATCHER_RESTARTS
@@ -621,6 +624,38 @@ def sync_pending(*, force: bool = False) -> dict[str, Any]:
     for item in rejected:
         event("rejected", **item)
     return result(deferred=False, published=published, rejected=rejected)
+
+
+def requeue_for_retry(items: list[dict[str, Any]]) -> list[str]:
+    """Put already-decided items back on the queue so a later boundary re-attempts publication.
+
+    Called by the request boundary when this process published but the worker fan-out did not
+    complete. `sync_pending` advances the rescan baseline for every decided item, so without this
+    nothing would re-announce the change: the file is not touched again, the watcher reports
+    nothing, and a rescan compares equal. The workers would stay on the old code while this
+    process reports success — the version skew the boundary exists to prevent, made permanent.
+
+    The baseline entry is dropped as well as the record re-queued, so a watcher restart's rescan
+    reaches the same conclusion this call does instead of treating the file as accounted for.
+    """
+    manifest = _MANIFEST
+    if not _INSTALLED or manifest is None:
+        return []
+    # Resolved before the lock, like `_digests_on_disk`: `_STATE_LOCK` is what the watcher thread
+    # takes to record a change, and one `resolve()` per item is filesystem work to keep out of it.
+    targets = [(relative, manifest.path_for(relative).resolve()) for item in items if isinstance(relative := item.get("path"), str) and relative in manifest.reactive_paths]
+    requeued: list[str] = []
+    now = time.monotonic()
+    with _STATE_LOCK:
+        for relative, path in targets:
+            # `setdefault`: a watcher record queued since the drain describes the file as it is
+            # now, and must not be replaced by this older one.
+            _PENDING.setdefault(path, {"path": relative, "seen_at": now, "source": "retry"})
+            _FILE_DIGESTS.pop(relative, None)
+            requeued.append(relative)
+    if requeued:
+        event("requeued_for_retry", paths=requeued)
+    return requeued
 
 
 def state() -> dict[str, Any]:

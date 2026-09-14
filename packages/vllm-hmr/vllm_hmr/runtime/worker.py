@@ -24,9 +24,13 @@ class HMRWorkerExtension:
     rank: int  # provided by the WorkerBase this class is mixed into, never by this class
 
     def vllm_hmr_sync_pending(self, force: bool = False) -> dict[str, Any]:
-        from .bootstrap import sync_pending
+        from .bootstrap import requeue_for_retry, sync_pending
 
-        return sync_pending(force=force)
+        result = sync_pending(force=force)
+        retryable = [item for item in result.get("rejected", ()) if "not loaded from this source root" not in str(item.get("error", ""))]
+        if retryable:
+            requeue_for_retry(retryable)
+        return result
 
     def vllm_hmr_state(self) -> dict[str, Any]:
         import os
