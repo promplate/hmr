@@ -71,7 +71,7 @@ def _version_skew_problems(worker_sync) -> list[dict]:
             if not isinstance(item, dict):
                 continue
             error = item.get("error", "")
-            if NEVER_LOADED not in str(error):
+            if not str(error).startswith(f"{NEVER_LOADED}:"):
                 skew.append({"where": f"worker[{rank}]", "path": item.get("path"), "error": error})
     return skew
 
