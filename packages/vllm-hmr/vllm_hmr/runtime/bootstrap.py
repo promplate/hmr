@@ -32,6 +32,7 @@ _WATCH_STOP = threading.Event()
 _WATCH_THREAD: threading.Thread | None = None
 _WATCHER_FAILED = False
 _WATCHER_RESTARTS = 0
+_WATCH_GENERATION = 0
 _FILE_DIGESTS: dict[str, str] = {}  # relative path -> the content digest this process last accounted for
 DEFAULT_MAX_WATCHER_RESTARTS = 3
 
@@ -136,10 +137,17 @@ def install_from_env() -> None:
 
 
 def _start_watcher() -> None:
-    global _WATCH_STOP, _WATCH_THREAD
-    _WATCH_STOP = threading.Event()
-    _WATCH_THREAD = threading.Thread(target=_watch, name="vllm-hmr-watch", daemon=True)
-    _WATCH_THREAD.start()
+    global _WATCH_GENERATION, _WATCH_STOP, _WATCH_THREAD
+    manifest = _MANIFEST
+    assert manifest is not None
+    stop_event = threading.Event()
+    with _STATE_LOCK:
+        _WATCH_GENERATION += 1
+        generation = _WATCH_GENERATION
+        _WATCH_STOP = stop_event
+        _WATCH_THREAD = threading.Thread(target=_watch, args=(manifest, stop_event, generation), name="vllm-hmr-watch", daemon=True)
+        thread = _WATCH_THREAD
+    thread.start()
 
 
 def _digests_on_disk(manifest: Manifest) -> list[tuple[str, str, Path]]:
@@ -297,23 +305,26 @@ def _after_fork() -> None:
 
 
 def _stop_watcher() -> None:
-    _WATCH_STOP.set()
-    thread = _WATCH_THREAD
+    global _WATCH_GENERATION
+    with _STATE_LOCK:
+        _WATCH_GENERATION += 1
+        stop_event = _WATCH_STOP
+        thread = _WATCH_THREAD
+    stop_event.set()
     if thread is not None and thread.is_alive():
         thread.join(timeout=5)
 
 
-def _watch() -> None:
+def _watch(manifest: Manifest, stop_event: threading.Event, generation: int) -> None:
     global _WATCHER_FAILED
-    assert _MANIFEST is not None
-    source_root = _MANIFEST.source_root
+    source_root = manifest.source_root
     try:
-        watch_paths = [str(source_root / relative) for relative in sorted(_MANIFEST.reactive_paths)]
+        watch_paths = [str(source_root / relative) for relative in sorted(manifest.reactive_paths)]
         for changes in watch(
             *watch_paths,
             debounce=int(os.getenv("HMR_VLLM_DEBOUNCE_MS", "300")),
             step=50,
-            stop_event=_WATCH_STOP,
+            stop_event=stop_event,
         ):
             now = time.monotonic()
             observed: list[tuple[Path, str, str]] = []
@@ -325,7 +336,7 @@ def _watch() -> None:
                     rel = path.relative_to(source_root).as_posix()
                 except ValueError:
                     continue
-                if rel not in _MANIFEST.reactive_paths:
+                if rel not in manifest.reactive_paths:
                     continue
                 try:
                     digest = sha256(path)
@@ -333,16 +344,20 @@ def _watch() -> None:
                     continue
                 observed.append((path, rel, digest))
             with _STATE_LOCK:
+                if generation != _WATCH_GENERATION:
+                    return
                 for path, rel, digest in observed:
                     if _FILE_DIGESTS.get(rel) == digest:
                         continue
                     _FILE_DIGESTS[rel] = digest
                     _PENDING[path] = {"path": rel, "seen_at": now}
                     event("source_change", path=rel)
-        if not _WATCH_STOP.is_set():
+        if not stop_event.is_set():
             raise RuntimeError("watcher iterator ended unexpectedly")
     except Exception as exc:
         with _STATE_LOCK:
+            if generation != _WATCH_GENERATION:
+                return
             _WATCHER_FAILED = True
         event("watcher_failed", error=f"{type(exc).__name__}: {exc}")
 

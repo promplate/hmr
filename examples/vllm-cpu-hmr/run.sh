@@ -162,7 +162,11 @@ STAGE="run"
 # produce no receipt. Job control gives the client its own group without moving tee into it;
 # tee must survive TERM long enough to drain the client's final output.
 exec {RUN_LOG_FD}> >(tee -a "$RESULTS/cpu-runner-full.log")
-LOG_PID=$!
+LOG_PID="${!:-}"
+if [[ -z "$LOG_PID" ]]; then
+  printf '%s\n' 'This runner requires Bash 4.4 or later.' >&2
+  exit 1
+fi
 set -m
 PROBE_LAUNCHING=1
 probe &

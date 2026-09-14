@@ -20,12 +20,13 @@ import importlib.util
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from vllm_hmr.runtime import bootstrap
+from vllm_hmr.runtime import bootstrap, scope
 
 RUNTIME_DEPS = all(importlib.util.find_spec(name) is not None for name in ("reactivity", "watchfiles"))
 
@@ -67,6 +68,17 @@ class WatcherFailureTests(unittest.TestCase):
         original = os.environ.get(key)
         os.environ[key] = value
         self.addCleanup(lambda: os.environ.__setitem__(key, original) if original is not None else os.environ.pop(key, None))
+
+    def test_stale_watcher_cannot_write_into_a_later_generation(self):
+        manifest = scope.build_manifest(self.root)
+        generation = bootstrap._WATCH_GENERATION  # noqa: SLF001
+        self.addCleanup(setattr, bootstrap, "_WATCH_GENERATION", generation)
+        bootstrap._WATCH_GENERATION = generation + 1  # noqa: SLF001
+        changes = {(bootstrap.Change.modified, str(self.provider))}
+        with patch.object(bootstrap, "watch", return_value=iter((changes,))):
+            bootstrap._watch(manifest, threading.Event(), generation)  # noqa: SLF001
+        self.assertEqual(bootstrap._PENDING, {})  # noqa: SLF001
+        self.assertFalse(bootstrap._WATCHER_FAILED)  # noqa: SLF001
 
     def test_normally_ended_watcher_marks_failure(self):
         self.set_env("HMR_VLLM_SOURCE_ROOT", str(self.root))
