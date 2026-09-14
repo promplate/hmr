@@ -62,10 +62,15 @@ def _next_sitecustomize_spec(shim_file: str, path: list[str] | None = None):
     return PathFinder.find_spec("sitecustomize", search_path)
 
 
+def _spec_path(spec) -> Path:
+    location = spec.origin or next(iter(spec.submodule_search_locations or ()))
+    return Path(location).resolve()
+
+
 def next_sitecustomize(shim_file: str, path: list[str] | None = None) -> Path | None:
     """Find the `sitecustomize` this shim shadowed, if the environment had one."""
     if spec := _next_sitecustomize_spec(shim_file, path):
-        return Path(spec.origin) if spec.origin else Path(next(iter(spec.submodule_search_locations or ())))
+        return _spec_path(spec)
     return None
 
 
@@ -88,4 +93,4 @@ def chain_to_next_sitecustomize(shim_file: str) -> Path | None:
         else:
             sys.modules["sitecustomize"] = previous
         raise
-    return Path(spec.origin) if spec.origin else Path(next(iter(spec.submodule_search_locations or ())))
+    return _spec_path(spec)

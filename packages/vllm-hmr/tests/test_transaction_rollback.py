@@ -107,6 +107,7 @@ class TransactionRollbackTests(unittest.TestCase):
     def test_atexit_registration_failure_allows_a_safe_install_retry(self):
         self.assert_failed_install_can_retry("atexit.register")
 
+    @unittest.skipUnless(hasattr(os, "register_at_fork"), "requires os.register_at_fork")
     def test_fork_registration_failure_allows_a_safe_install_retry(self):
         self.assert_failed_install_can_retry("os.register_at_fork")
 

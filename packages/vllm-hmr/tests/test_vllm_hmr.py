@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import json
 import os
@@ -775,12 +776,17 @@ class ShimTests(unittest.TestCase):
                 package = root / name / "sitecustomize"
                 package.mkdir(parents=True)
                 (package / f"{name}.py").write_text(f"VALUE = {name!r}\n", encoding="utf-8")
-            for entries in ([str(root / "one"), str(root / "two")], [str(vllm_hmr.SHIM_DIR), str(root / "one"), str(root / "two")]):
-                env = dict(os.environ, NO_HMR_DAEMON="1", PYTHONPATH=os.pathsep.join(entries), HMR_VLLM_ENABLE="0")
-                code = "from sitecustomize import one, two; print(one.VALUE, two.VALUE)"
-                done = subprocess.run([sys.executable, "-P", "-c", code], cwd=root.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
-                self.assertEqual(done.returncode, 0, done.stderr)
-                self.assertEqual(done.stdout.strip(), "one two")
+            entries = [str(vllm_hmr.SHIM_DIR), str(root / "one"), str(root / "two")]
+            original = sys.path
+            sys.path = entries
+            try:
+                with unittest.mock.patch.dict(sys.modules):
+                    self.assertEqual(vllm_hmr_shim.chain_to_next_sitecustomize(str(Path(vllm_hmr.SHIM_DIR) / "sitecustomize.py")), (root / "one" / "sitecustomize").resolve())
+                    one = importlib.import_module("sitecustomize.one")
+                    two = importlib.import_module("sitecustomize.two")
+                    self.assertEqual((one.VALUE, two.VALUE), ("one", "two"))
+            finally:
+                sys.path = original
 
     def test_no_shadowed_sitecustomize_is_not_an_error(self):
         with tempfile.TemporaryDirectory() as raw:
