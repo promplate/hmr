@@ -25,6 +25,7 @@ from sglang_hmr.runtime.scope import build_manifest as build_manifest_obj
 
 FUNCTION = "has_forward_context"
 PYTH_SHA = "d410f975367e8a29b17183d108ef09a089e42b63"
+TARGET_MODULE = TARGET.removeprefix("python/").removesuffix(".py").replace("/", ".")
 
 
 def python_source_hashes(root: Path) -> dict[str, str]:
@@ -364,7 +365,7 @@ def run(args: argparse.Namespace) -> None:
         # The scheduler's live module must come from the source root, not from the
         # installed site-packages copy. Without this, an edit could publish "successfully"
         # against a tree the running process never imported.
-        live_file = baseline_probe["modules"].get("sglang.srt.model_executor.forward_context", {}).get("module_file")
+        live_file = baseline_probe["modules"].get(TARGET_MODULE, {}).get("module_file")
         if live_file is None or Path(live_file).resolve() != target.resolve():
             raise AssertionError(f"the live module came from {live_file}, not from the source root target {target}")
         # `sglang-hmr` exec'd into this PID, so the listener's own cmdline is proof of both
