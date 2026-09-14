@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=9.1.1,<10"]
 
 [tool.uv.workspace]
 members = ["examples/*", "packages/*"]
