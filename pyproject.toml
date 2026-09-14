@@ -11,9 +11,6 @@ dependencies = [
     "vllm-hmr",
 ]
 
-[dependency-groups]
-dev = ["pytest>=8,<9"]
-
 [tool.uv.workspace]
 members = ["examples/*", "packages/*"]
 
@@ -26,7 +23,6 @@ vllm-hmr = { workspace = true }
 [tool.pyright]
 typeCheckingMode = "standard"
 reportUnnecessaryTypeIgnoreComment = "error"
-extraPaths = ["examples/vllm-cpu-hmr/tests"]
 
 [tool.ruff]
 line-length = 200
