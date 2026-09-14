@@ -12,7 +12,9 @@
 #   MOCK_RUN_LEAVE_CONTAINER=1 the probe leaves its container registered, as an interrupted
 #                              `--rm` client does, so the cid fallback in cleanup has work to do
 #   MOCK_RUN_SLEEP=N           the probe sleeps N seconds before exiting, for signal tests
+#   MOCK_RUN_WORKER=1          leave a TERM-resistant worker holding the probe's log pipe open
 #   MOCK_RM_FAILS=1            `docker rm` reports success but leaves the container registered
+#   MOCK_LS_FAILS=1            `docker container ls` fails, so cleanup cannot confirm removal
 set -euo pipefail
 
 BASE_IMAGE="vllm/vllm-openai-cpu:v0.28.0-x86_64"
@@ -82,6 +84,10 @@ run)
   printf '%s\n' "$cid" >"$cidfile"
   printf '{"id":"%s","name":"%s"}\n' "$cid" "$name" >"$MOCK_STATE_DIR/container-$cid.json"
   printf 'mock docker run: started %s\n' "$name"
+  if [[ "${MOCK_RUN_WORKER-0}" == 1 ]]; then
+    printf '%s\n' "$$" >"$MOCK_STATE_DIR/probe.pid"
+    bash -c 'trap "" TERM; printf "%s\n" "$$" >"$MOCK_STATE_DIR/worker.pid"; exec sleep 30' &
+  fi
   [[ "${MOCK_RUN_SLEEP-0}" != 0 ]] && sleep "$MOCK_RUN_SLEEP"
   # `--rm` removes the container on exit on both the success and failure paths; the override
   # models the client losing its connection before that happens.
@@ -102,6 +108,10 @@ container)
   # `run.sh` must look containers up by id; a name filter would match an unrelated container.
   [[ "$filter" == id=* ]] || { printf 'mock docker: refusing non-id filter %s\n' "$filter" >&2; exit 2; }
   cid="${filter#id=}"
+  if [[ "${MOCK_LS_FAILS-0}" == 1 ]]; then
+    printf 'mock docker: container ls failed\n' >&2
+    exit 9
+  fi
   # An unmatched filter is an empty listing, not an error: real `docker container ls` exits 0.
   # `run.sh` distinguishes the two, treating a failed query as "removal unconfirmed".
   if [[ -f "$MOCK_STATE_DIR/container-$cid.json" ]]; then

@@ -37,26 +37,58 @@ for artifact in cpu-smoke-receipt.json cpu-smoke-full.log cpu-source-manifest.js
   fi
 done
 
+stop_probe() {
+  # A trap can run between `probe &` and RUN_PID=$!. In that window $! already names
+  # the group leader; before launch it still names tee, which must only be drained.
+  if [[ "${PROBE_LAUNCHING:-0}" == 1 && "${!:-}" != "${LOG_PID:-}" ]]; then
+    RUN_PID=$!
+  fi
+  if [[ -n "${RUN_PID:-}" ]]; then
+    # A reaped client can leave helpers holding tee's pipe open. Bound the whole group's
+    # grace period; the container itself gets its longer shutdown through the cid below.
+    if kill -0 -- "-$RUN_PID" 2>/dev/null; then
+      kill -TERM -- "-$RUN_PID" 2>/dev/null || true
+      local attempt
+      for attempt in {1..10}; do
+        kill -0 -- "-$RUN_PID" 2>/dev/null || break
+        sleep 0.1
+      done
+      kill -KILL -- "-$RUN_PID" 2>/dev/null || true
+    fi
+    local probe_status=0
+    wait "$RUN_PID" 2>/dev/null || probe_status=$?
+    if [[ "$RUN_EXIT_CODE" == null ]]; then
+      RUN_EXIT_CODE=$probe_status
+    fi
+    RUN_PID=""
+  fi
+}
+
 cleanup() {
   local status=$?
   # Disarmed first: `docker stop` below can take minutes, and a second signal arriving mid-teardown
   # must not re-enter this function and truncate the receipt it is in the middle of writing.
-  trap - EXIT
   trap '' INT TERM
+  trap - EXIT
   local cid="" container_created=false container_removed=false cleanup_failed=false remaining=""
-  # A signal interrupts `wait` without touching the backgrounded probe, so the `docker run` client
-  # would keep running and keep writing to the log this function is about to finish. Killing the
-  # client does not stop the container, which is why the cid path below still does the real work.
-  if [[ -n "${RUN_PID:-}" ]] && kill -0 "$RUN_PID" 2>/dev/null; then
-    kill -TERM "$RUN_PID" 2>/dev/null || true
-    wait "$RUN_PID" 2>/dev/null || true
+  # The client has its own process group, including any helpers holding its output pipe open.
+  # Reap it, then drain tee before recording the outcome. Killing only a background function's
+  # shell would orphan both the docker client and the log writer.
+  if [[ -n "${RUN_LOG_FD:-}" ]]; then
+    exec {RUN_LOG_FD}>&-
+  fi
+  stop_probe
+  if [[ -n "${LOG_PID:-}" ]]; then
+    wait "$LOG_PID" 2>/dev/null || true
   fi
   if [[ -s "$RESULTS/cpu-container.cid" ]]; then
     cid="$(<"$RESULTS/cpu-container.cid")"
     container_created=true
     # --rm covers the normal path. This is the fallback for an interrupted or disconnected CLI,
     # and it targets this run's own cid: removing by name could hit an unrelated container.
-    if remaining="$(docker container ls --all --quiet --filter "id=$cid" 2>>"$RESULTS/cpu-runner-full.log")" && [[ -n "$remaining" ]]; then
+    if ! remaining="$(docker container ls --all --quiet --filter "id=$cid" 2>>"$RESULTS/cpu-runner-full.log")"; then
+      cleanup_failed=true
+    elif [[ -n "$remaining" ]]; then
       docker stop --time 150 "$cid" >>"$RESULTS/cpu-runner-full.log" 2>&1 || true
       docker rm -f "$cid" >>"$RESULTS/cpu-runner-full.log" 2>&1 || true
       if remaining="$(docker container ls --all --quiet --filter "id=$cid" 2>>"$RESULTS/cpu-runner-full.log")" && [[ -z "$remaining" ]]; then
@@ -79,9 +111,9 @@ cleanup() {
 # artifacts in it: every exit from here on writes a receipt naming the stage that failed. The
 # previous order installed this only after `docker build`, so a failed build left a full log with
 # no receipt beside it — no machine-readable outcome, and the guard blocked the next run.
-trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap cleanup EXIT
 
 # The official image runs the probe as root. Keep the bind-mounted receipt
 # directory reusable by the invoking user on the next run.
@@ -107,9 +139,8 @@ PYTH_CORE_SHA="$(docker run --rm --entrypoint python3 "$IMAGE" -c \
   'import hashlib, reactivity.hmr.core as c; print(hashlib.sha256(open(c.__file__, "rb").read()).hexdigest())' 2>>"$RESULTS/cpu-runner-full.log")"
 
 probe() {
-  # `pipefail` again: `tee` must not substitute its own status for the probe's, which is the
-  # exit code this whole run is evidence about.
-  docker run --rm --name "$NAME" --cidfile "$RESULTS/cpu-container.cid" --shm-size=4g \
+  # exec keeps RUN_PID attached to the client, rather than a shell waiting on a pipeline.
+  exec docker run --rm --name "$NAME" --cidfile "$RESULTS/cpu-container.cid" --shm-size=4g \
     -v "$RESULTS:/results" \
     "$IMAGE" \
     --source /opt/vllm-release-source \
@@ -122,17 +153,32 @@ probe() {
     --vllm-version 0.28.0+cpu \
     --installed-source /opt/venv/lib/python3.12/site-packages/vllm \
     --pyth-core-path /opt/venv/lib/python3.12/site-packages/reactivity/hmr/core.py \
-    --pyth-core-sha256 "$PYTH_CORE_SHA" 2>&1 | tee -a "$RESULTS/cpu-runner-full.log"
+    --pyth-core-sha256 "$PYTH_CORE_SHA" >&"$RUN_LOG_FD" 2>&1
 }
 
 STAGE="run"
 # Backgrounded so `wait` stays interruptible: a SIGTERM addressed to this script alone
 # would otherwise be deferred until the probe returns, and a run that lasts minutes would
-# produce no receipt. The cleanup trap reaches the container by cid either way.
+# produce no receipt. Job control gives the client its own group without moving tee into it;
+# tee must survive TERM long enough to drain the client's final output.
+exec {RUN_LOG_FD}> >(tee -a "$RESULTS/cpu-runner-full.log")
+LOG_PID=$!
+set -m
+PROBE_LAUNCHING=1
 probe &
 RUN_PID=$!
+PROBE_LAUNCHING=0
+set +m
+exec {RUN_LOG_FD}>&-
 set +e
 wait "$RUN_PID"
 RUN_EXIT_CODE=$?
+stop_probe
+wait "$LOG_PID"
+LOG_EXIT_CODE=$?
 set -e
+# Preserve the old pipeline's rightmost nonzero status if writing the evidence itself failed.
+if [[ "$LOG_EXIT_CODE" -ne 0 ]]; then
+  exit "$LOG_EXIT_CODE"
+fi
 exit "$RUN_EXIT_CODE"

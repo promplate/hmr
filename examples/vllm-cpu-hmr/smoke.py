@@ -63,21 +63,41 @@ def verify_release(source: Path, args: argparse.Namespace) -> dict[str, str]:
     return baseline
 
 
+def wait_for_server_exit(process: subprocess.Popen, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    process.wait(timeout=timeout)
+    while True:
+        # As container PID 1 we may adopt workers after the leader exits. Reap only this
+        # group so exited workers do not remain zombies that keep killpg(..., 0) alive.
+        with suppress(ChildProcessError):
+            while os.waitpid(-process.pid, os.WNOHANG)[0]:
+                pass
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        time.sleep(min(0.1, remaining))
+
+
 def stop_server(process: subprocess.Popen) -> None:
     # A dead group leader does not mean an empty group: vLLM's engine and worker processes
     # can outlive it, so the group is always signalled rather than skipped on leader exit.
     # `killpg` also races the leader's own exit, where ESRCH means "already gone", not a failure.
-    with suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGTERM)
     try:
-        process.wait(timeout=60)
-    except subprocess.TimeoutExpired:
-        # Only escalate when SIGTERM did not bring the leader down. Escalating unconditionally
-        # SIGKILLs the whole group with zero grace even on the clean path, cutting off the
-        # engine/worker teardown that was already flushing its own evidence.
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGTERM)
+        wait_for_server_exit(process, 60)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+        # An interrupted wait may already have reaped the leader; its workers still need
+        # escalation. Preserve the interruption after confirming the whole group is gone.
         with suppress(ProcessLookupError):
             os.killpg(process.pid, SIGKILL)
-        process.wait(timeout=30)
+        wait_for_server_exit(process, 30)
+        if isinstance(exc, KeyboardInterrupt):
+            raise
 
 
 def request_json(
@@ -255,6 +275,15 @@ def wait_published(base: str, timeout: float = 120) -> tuple[dict[str, Any], dic
 
 
 def run(args: argparse.Namespace) -> None:
+    previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        _run(args)
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
+def _run(args: argparse.Namespace) -> None:
     source = Path(args.source).resolve()
     results = Path(args.results).resolve()
     results.mkdir(parents=True, exist_ok=True)
@@ -440,7 +469,8 @@ def run(args: argparse.Namespace) -> None:
         before_log = log_path.read_text(encoding="utf-8", errors="replace")
         load_evidence_before = load_lines(before_log)
 
-        with MutationSet(source) as edits:
+        edits = MutationSet(source)
+        try:
             inserted_line = edits.insert_statement(TARGET, FUNCTION, print_statement(MARKER))
             mutated_hash = sha256(target)
             if mutated_hash == original_target_hash:
@@ -549,6 +579,9 @@ def run(args: argparse.Namespace) -> None:
                     },
                 }
             )
+        finally:
+            ignore_interrupts()
+            edits.restore()
         restored_hash = sha256(target)
         restored_changes = changed_sources(baseline_hashes, python_source_hashes(source))
         receipt["target"]["restored_sha256"] = restored_hash
@@ -556,6 +589,7 @@ def run(args: argparse.Namespace) -> None:
         if not receipt["assertions"]["edited_bytes_restored"]:
             raise AssertionError((original_target_hash, restored_hash, restored_changes))
     except BaseException as exc:
+        ignore_interrupts()
         receipt["status"] = "failed"
         receipt["error"] = f"{type(exc).__name__}: {exc}"
         # Teardown happens in `finally`, so the server is still up here: a failed receipt that
@@ -567,12 +601,12 @@ def run(args: argparse.Namespace) -> None:
                 receipt["state_at_failure_error"] = f"{type(probe_error).__name__}: {probe_error}"
         raise
     finally:
+        ignore_interrupts()
         try:
             if process is not None:
                 stop_server(process)
-        # Wider than `Exception`: `interrupted` turns SIGTERM into KeyboardInterrupt, and `docker
-        # stop` sends a second one when the first is slow. Letting that escape here would skip the
-        # receipt write below, which is the exact failure `interrupted` exists to prevent.
+        # Signals are disarmed, but a synchronous KeyboardInterrupt from a wait must also
+        # leave a failure receipt after stop_server has attempted group cleanup.
         # `SystemExit` and `GeneratorExit` stay out: they are control flow this teardown must not
         # rewrite into a receipt field, and swallowing them strands the interpreter mid-shutdown.
         except (Exception, KeyboardInterrupt) as exc:
@@ -630,12 +664,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def ignore_interrupts() -> None:
+    # Stay disarmed through source restoration and the receipt write, not just process.wait.
+    # run() restores the caller's handlers once finalization is complete.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, signal.SIG_IGN)
+
+
 def interrupted(signum, frame):
     """`docker stop` sends SIGTERM; without this the default handler skips `finally`, i.e. skips the receipt and the teardown."""
     del frame
+    ignore_interrupts()
     raise KeyboardInterrupt(f"received signal {signum}")
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, interrupted)
     run(parse_args())
