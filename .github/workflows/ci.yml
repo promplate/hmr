@@ -36,6 +36,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Check typing
         run: bunx basedpyright
+      - name: Test vllm-hmr
+        run: uv run pytest packages/vllm-hmr/tests
+      - name: Test vllm-cpu-hmr example
+        run: uv run pytest examples/vllm-cpu-hmr/tests
 
   publish:
     if: github.ref_type == 'tag'
@@ -48,6 +52,7 @@ jobs:
           - fastapi-reloader
           - hmr-daemon
           - mcp-hmr
+          - vllm-hmr
       fail-fast: false
     needs: [typos, check]
     permissions:

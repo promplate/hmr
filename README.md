@@ -65,6 +65,7 @@ https://github.com/user-attachments/assets/fb247649-193d-4eed-b778-05b02d47c3f6
 - [`fastapi/`](./examples/fastapi/) - FastAPI server with hot reloading and browser refresh
 - [`flask/`](./examples/flask/) - Flask app with hot module reloading
 - [`mcp/`](./examples/mcp/) - MCP server with live code updates without connection drops
+- [`vllm-cpu-hmr/`](./examples/vllm-cpu-hmr/) - Real vLLM CPU inference with request-boundary HMR
 
 ## Motivation
 
