@@ -12,5 +12,11 @@ set, so a plain `vllm-hmr serve ...` remains a bare vLLM launch.
 
 from vllm_hmr.shim import chain_to_next_sitecustomize, install_from_env
 
-chain_to_next_sitecustomize(__file__)
+try:
+    chain_to_next_sitecustomize(__file__)
+except Exception:
+    # CPython's site module owns the warning (and the special missing-module silence).
+    # Install first, then let it handle the original exception and continue startup normally.
+    install_from_env()
+    raise
 install_from_env()

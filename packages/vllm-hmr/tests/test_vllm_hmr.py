@@ -6,10 +6,11 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import types
-import unittest
+import unittest.mock
 from pathlib import Path
 
 import vllm_hmr
@@ -114,6 +115,13 @@ class FlagInjectionTests(unittest.TestCase):
         self.assertNotIn(vllm_hmr.WORKER_EXTENSION, argv)
         self.assertIn(vllm_hmr.MIDDLEWARE, argv)
 
+    def test_user_worker_extension_in_underscore_form_is_not_duplicated(self):
+        for flag in (["--worker_extension_cls", "mine.Ext"], ["--worker_extension_cls=mine.Ext"]):
+            with self.subTest(flag=flag):
+                argv = ["serve", "m", "--middleware", "mine.Mw", *flag]
+                self.assertEqual(vllm_hmr.inject_vllm_flags(argv), argv)
+                self.assertIn(vllm_hmr.WORKER_EXTENSION, vllm_hmr.inject_vllm_flags(["serve", "m", "--", *flag]))
+
     def test_both_user_flags_leave_argv_unchanged(self):
         argv = ["serve", "m", "--middleware", "mine.Mw", "--worker-extension-cls", "mine.Ext"]
         self.assertEqual(vllm_hmr.inject_vllm_flags(argv), argv)
@@ -135,6 +143,21 @@ class EnvironmentTests(SourceTreeTestCase):
     def test_explicit_runtime_overrides_the_default(self):
         env = vllm_hmr.build_env({"HMR_VLLM_SOURCE_ROOT": str(self.source), "HMR_VLLM_RUNTIME": OVERRIDE_RUNTIME}, {}, serve=True)
         self.assertEqual(env["HMR_VLLM_RUNTIME"], OVERRIDE_RUNTIME)
+
+    def test_existing_shim_is_promoted_before_user_sitecustomize(self):
+        (self.source / "sitecustomize.py").write_text("print('user sitecustomize')\n", encoding="utf-8")
+        (self.source / "hmr_startup.py").write_text("def install(): print('hmr installed')\n", encoding="utf-8")
+        self.enterContext(unittest.mock.patch.object(sys, "path", [str(self.source), *sys.path]))
+        self.addCleanup(sys.modules.pop, "hmr_startup", None)
+        shim = str(vllm_hmr.SHIM_DIR)
+        alias = str(vllm_hmr.SHIM_DIR / ".." / "_sitecustomize")
+        for entries in ([str(self.source), shim], [str(self.source), alias, "", shim]):
+            with self.subTest(entries=entries):
+                env = vllm_hmr.build_env({"HMR_VLLM_RUNTIME": "hmr_startup:install"}, dict(os.environ, NO_HMR_DAEMON="1", **self.base_env(PYTHONPATH=os.pathsep.join(entries))), serve=True)
+                done = subprocess.run([sys.executable, "-P", "-c", "print('body')"], cwd=self.source.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.splitlines(), ["user sitecustomize", "hmr installed", "body"], done.stderr)
+                self.assertEqual(env["PYTHONPATH"].split(os.pathsep), [shim, str(self.source), *([""] if "" in entries else [])])
 
     def test_non_serve_subcommand_is_left_alone(self):
         env = vllm_hmr.build_env({}, {"PATH": "/usr/bin"}, serve=False)
@@ -168,6 +191,20 @@ class EnvironmentTests(SourceTreeTestCase):
         env = vllm_hmr.build_env({"HMR_VLLM_DISABLED": "1"}, base, serve=True)
         self.assertEqual(env["PYTHONPATH"], os.pathsep.join(["/mine/first", "/mine/second"]))
         self.assertNotIn("HMR_VLLM_ENABLE", env)
+
+    def test_deactivation_preserves_empty_pythonpath_entries(self):
+        self.assertEqual(vllm_hmr.deactivate({"PYTHONPATH": ""}), {"PYTHONPATH": ""})
+        (self.source / "hmr_cwd_marker.py").write_text("VALUE = 'from cwd'\n", encoding="utf-8")
+        shim = str(vllm_hmr.SHIM_DIR)
+        for entries in ([shim, ""], ["", shim], ["", shim, ""], ["", "/mine", shim]):
+            with self.subTest(entries=entries):
+                env = vllm_hmr.deactivate(dict(os.environ, PYTHONPATH=os.pathsep.join(entries)))
+                # -P removes the implicit cwd from -c; only PYTHONPATH can make this import work.
+                done = subprocess.run(
+                    [sys.executable, "-S", "-P", "-c", "import hmr_cwd_marker; print(hmr_cwd_marker.VALUE)"], cwd=self.source, env=env, capture_output=True, text=True, timeout=10, check=False
+                )
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.strip(), "from cwd")
 
     def test_a_non_serve_subcommand_also_drops_an_inherited_activation(self):
         """Every other subcommand is documented as untouched, which an inherited activation broke too."""
@@ -448,7 +485,7 @@ class SourceDetectionTests(SourceTreeTestCase):
             detected = vllm_hmr_source.find_editable_vllm_root()
             self.assertIsNotNone(detected)
             assert detected is not None
-            self.assertTrue(os.path.samefile(detected, self.source))
+            self.assertTrue(Path(detected).samefile(self.source))
         finally:
             sys.modules.pop("vllm", None)
             if original is not None:
@@ -687,10 +724,63 @@ class ShimTests(unittest.TestCase):
             original = sys.path
             sys.path = path
             try:
-                self.assertEqual(vllm_hmr_shim.chain_to_next_sitecustomize(str(shim_file)), (other / "sitecustomize.py").resolve())
+                with unittest.mock.patch.dict(sys.modules):
+                    self.assertEqual(vllm_hmr_shim.chain_to_next_sitecustomize(str(shim_file)), (other / "sitecustomize.py").resolve())
             finally:
                 sys.path = original
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "chained")
+
+    def test_package_sitecustomize_is_chained_with_relative_imports(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            package = root / "sitecustomize"
+            package.mkdir()
+            (package / "marker.py").write_text("VALUE = 'user sitecustomize'\n", encoding="utf-8")
+            (package / "later.py").write_text("VALUE = 'hmr installed'\n", encoding="utf-8")
+            (package / "__init__.py").write_text("from .marker import VALUE\nprint(VALUE)\ndef install():\n from .later import VALUE\n print(VALUE)\n", encoding="utf-8")
+            env = dict(os.environ, NO_HMR_DAEMON="1", PYTHONPATH=os.pathsep.join([str(vllm_hmr.SHIM_DIR), str(root)]), HMR_VLLM_ENABLE="1", HMR_VLLM_RUNTIME="sitecustomize:install")
+            done = subprocess.run([sys.executable, "-P", "-c", "import sitecustomize; sitecustomize.install()"], cwd=root.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(done.stdout.splitlines(), ["user sitecustomize", "hmr installed", "hmr installed"], done.stderr)
+
+    def test_file_sitecustomize_keeps_its_module_and_deferred_attributes(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "sitecustomize.py").write_text(
+                "import sys\nVALUE = 'user sitecustomize'\ndef install():\n from sitecustomize import VALUE\n print(VALUE)\ndef registered():\n return sys.modules[__name__].__dict__ is globals()\n",
+                encoding="utf-8",
+            )
+            env = dict(os.environ, NO_HMR_DAEMON="1", PYTHONPATH=os.pathsep.join([str(vllm_hmr.SHIM_DIR), str(root)]), HMR_VLLM_ENABLE="1", HMR_VLLM_RUNTIME="sitecustomize:install")
+            code = "import sitecustomize; sitecustomize.install(); assert sitecustomize.registered(); assert sitecustomize.__spec__.name == 'sitecustomize'"
+            done = subprocess.run([sys.executable, "-P", "-c", code], cwd=root.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(done.stdout.splitlines(), ["user sitecustomize", "user sitecustomize"], done.stderr)
+
+    def test_package_sitecustomize_takes_precedence_over_file(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "sitecustomize").mkdir()
+            (root / "sitecustomize" / "__init__.py").write_text("print('package')\n", encoding="utf-8")
+            (root / "sitecustomize.py").write_text("print('file')\n", encoding="utf-8")
+            for entries in ([str(root)], [str(vllm_hmr.SHIM_DIR), str(root)]):
+                env = dict(os.environ, NO_HMR_DAEMON="1", PYTHONPATH=os.pathsep.join(entries), HMR_VLLM_ENABLE="0")
+                done = subprocess.run([sys.executable, "-P", "-c", "print('body')"], cwd=root.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.splitlines(), ["package", "body"], done.stderr)
+
+    def test_namespace_sitecustomize_keeps_deferred_submodule_imports(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            for name in ("one", "two"):
+                package = root / name / "sitecustomize"
+                package.mkdir(parents=True)
+                (package / f"{name}.py").write_text(f"VALUE = {name!r}\n", encoding="utf-8")
+            for entries in ([str(root / "one"), str(root / "two")], [str(vllm_hmr.SHIM_DIR), str(root / "one"), str(root / "two")]):
+                env = dict(os.environ, NO_HMR_DAEMON="1", PYTHONPATH=os.pathsep.join(entries), HMR_VLLM_ENABLE="0")
+                code = "from sitecustomize import one, two; print(one.VALUE, two.VALUE)"
+                done = subprocess.run([sys.executable, "-P", "-c", code], cwd=root.parent, env=env, capture_output=True, text=True, timeout=10, check=False)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.strip(), "one two")
 
     def test_no_shadowed_sitecustomize_is_not_an_error(self):
         with tempfile.TemporaryDirectory() as raw:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ from . import telemetry
 from .scope import Manifest, ScopeError, build_manifest, load_manifest, sha256, syntax_preflight
 from .telemetry import active_scopes, event
 
-_INSTALL_LOCK = threading.Lock()
+_INSTALL_LOCK = threading.RLock()
 _INSTALLED = False
 _STATE_LOCK = threading.RLock()
 _SYNC_LOCK = threading.RLock()
@@ -33,6 +34,11 @@ _WATCHER_FAILED = False
 _WATCHER_RESTARTS = 0
 _FILE_DIGESTS: dict[str, str] = {}  # relative path -> the content digest this process last accounted for
 DEFAULT_MAX_WATCHER_RESTARTS = 3
+
+# Register the fork barrier before any install can hold the lock. Registering only after
+# watcher startup leaves a child forked by another thread with an unfinished install forever.
+if register_at_fork := getattr(os, "register_at_fork", None):
+    register_at_fork(before=lambda: _INSTALL_LOCK.acquire(), after_in_parent=lambda: _INSTALL_LOCK.release(), after_in_child=lambda: _INSTALL_LOCK.release())
 
 
 def max_watcher_restarts() -> int:
@@ -68,7 +74,7 @@ def install_unless_registry_inspector() -> None:
 
 
 def install_from_env() -> None:
-    global _INSTALLED, _MANIFEST
+    global _INSTALLED, _MANIFEST, _WATCH_THREAD, _WATCHER_FAILED, _WATCHER_RESTARTS
     with _INSTALL_LOCK:
         if _INSTALLED:
             return
@@ -78,23 +84,50 @@ def install_from_env() -> None:
         source_root = Path(source_root_raw).resolve()
         manifest_path_raw = os.getenv("HMR_VLLM_MANIFEST")
         manifest = load_manifest(Path(manifest_path_raw), source_root) if manifest_path_raw else build_manifest(source_root)
-        _MANIFEST = manifest
-
         include_paths = [str((source_root / relative).resolve()) for relative in manifest.reactive_paths]
 
+        from reactivity.hmr import fs
         from reactivity.hmr.core import patch_meta_path
 
-        patch_meta_path(includes=include_paths)
-
-        event("hmr_installed", includes=include_paths, manifest_paths=list(manifest.reactive_paths))
-        # Baseline for the rescan a watcher restart performs: without it, edits made while no
-        # watcher was running could not be distinguished from files nobody has touched.
-        _reset_digest_baseline(manifest)
-        _start_watcher()
-        atexit.register(_stop_watcher)
-        if register_at_fork := getattr(os, "register_at_fork", None):
-            register_at_fork(after_in_child=_after_fork)
+        previous_finders = {id(finder) for finder in sys.meta_path}
+        previous_filters = {id(path_filter) for path_filter in fs._filters}  # noqa: SLF001 - hmr exposes registration but no removal API
+        attempt_finders: set[int] = set()
+        attempt_filters: set[int] = set()
+        exit_registered = False
+        _MANIFEST = manifest
+        try:
+            try:
+                patch_meta_path(includes=include_paths)
+            finally:
+                # Capture only the hook registration step, so later registrations survive rollback.
+                attempt_finders = {id(finder) for finder in sys.meta_path} - previous_finders
+                attempt_filters = {id(path_filter) for path_filter in fs._filters} - previous_filters  # noqa: SLF001
+            # Baseline for the rescan a watcher restart performs: edits made while no watcher
+            # was running must be distinguishable from files nobody has touched.
+            _reset_digest_baseline(manifest)
+            _start_watcher()
+            atexit.register(_stop_watcher)
+            exit_registered = True
+            if register_at_fork := getattr(os, "register_at_fork", None):
+                register_at_fork(after_in_child=_after_fork)
+        except BaseException:
+            _stop_watcher()
+            if exit_registered:
+                atexit.unregister(_stop_watcher)
+            # A retry can select another root. Leaving this attempt's finder installed would
+            # make the old root reactive even though the next watcher only watches the new one.
+            sys.meta_path[:] = [finder for finder in sys.meta_path if id(finder) not in attempt_finders]
+            fs._filters[:] = [path_filter for path_filter in fs._filters if id(path_filter) not in attempt_filters]  # noqa: SLF001
+            with _STATE_LOCK:
+                _MANIFEST = None
+                _WATCH_THREAD = None
+                _WATCHER_FAILED = False
+                _WATCHER_RESTARTS = 0
+                _FILE_DIGESTS.clear()
+                _PENDING.clear()
+            raise
         _INSTALLED = True
+        event("hmr_installed", includes=include_paths, manifest_paths=list(manifest.reactive_paths))
 
 
 def _start_watcher() -> None:
@@ -250,7 +283,7 @@ def _after_fork() -> None:
     stays locked forever. vLLM's `serve` defaults to spawn, where this never runs.
     """
     global _INSTALL_LOCK, _STATE_LOCK, _SYNC_LOCK, _WATCHER_FAILED, _WATCHER_RESTARTS
-    _INSTALL_LOCK, _STATE_LOCK, _SYNC_LOCK = threading.Lock(), threading.RLock(), threading.RLock()
+    _INSTALL_LOCK, _STATE_LOCK, _SYNC_LOCK = threading.RLock(), threading.RLock(), threading.RLock()
     _WATCHER_FAILED = False  # the child starts its own watcher below, so a parent's failure is not inherited
     _WATCHER_RESTARTS = 0  # and neither is the parent's spent recovery budget
     telemetry.reset_after_fork()
@@ -301,6 +334,8 @@ def _watch() -> None:
                     _FILE_DIGESTS[rel] = digest
                     _PENDING[path] = {"path": rel, "seen_at": now}
                     event("source_change", path=rel)
+        if not _WATCH_STOP.is_set():
+            raise RuntimeError("watcher iterator ended unexpectedly")
     except Exception as exc:
         with _STATE_LOCK:
             _WATCHER_FAILED = True

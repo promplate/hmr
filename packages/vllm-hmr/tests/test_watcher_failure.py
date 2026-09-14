@@ -14,6 +14,7 @@ request forever; past the budget the runtime stays fail-closed and says so.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import importlib.util
 import os
@@ -21,6 +22,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from vllm_hmr.runtime import bootstrap
 
@@ -64,6 +67,45 @@ class WatcherFailureTests(unittest.TestCase):
         original = os.environ.get(key)
         os.environ[key] = value
         self.addCleanup(lambda: os.environ.__setitem__(key, original) if original is not None else os.environ.pop(key, None))
+
+    def test_normally_ended_watcher_marks_failure(self):
+        self.set_env("HMR_VLLM_SOURCE_ROOT", str(self.root))
+        self.addCleanup(bootstrap._stop_watcher)  # noqa: SLF001
+        with patch.object(bootstrap, "watch", return_value=iter(())):
+            bootstrap.install_from_env()
+            thread = bootstrap._WATCH_THREAD  # noqa: SLF001
+            assert thread is not None
+            thread.join(timeout=2)
+        self.assertFalse(bootstrap.state()["watcher_alive"])
+        self.assertTrue(bootstrap.state()["watcher_failed"])
+
+    def test_normally_ended_restarts_exhaust_budget_and_suppress_worker_rpc(self):
+        from vllm_hmr.runtime.middleware import HMRBoundaryMiddleware
+
+        self.set_env("HMR_VLLM_SOURCE_ROOT", str(self.root))
+        self.set_env("HMR_VLLM_MAX_WATCHER_RESTARTS", "2")
+        self.addCleanup(bootstrap._stop_watcher)  # noqa: SLF001
+        original = bootstrap._start_watcher  # noqa: SLF001
+
+        def start_and_wait():
+            original()
+            thread = bootstrap._WATCH_THREAD  # noqa: SLF001
+            assert thread is not None
+            thread.join(timeout=2)
+
+        with patch.object(bootstrap, "watch", return_value=iter(())), patch.object(bootstrap, "_start_watcher", side_effect=start_and_wait) as start:
+            bootstrap.install_from_env()
+            bootstrap.sync_pending()
+            refused = bootstrap.sync_pending()
+            self.assertFalse(refused["hmr_available"], refused)
+            self.assertTrue(bootstrap.state()["watcher_recovery_exhausted"])
+            engine = SimpleNamespace(collective_rpc=AsyncMock())
+            app = AsyncMock()
+            request = {"type": "http", "path": "/v1/completions", "app": SimpleNamespace(state=SimpleNamespace(engine_client=engine))}
+            asyncio.run(HMRBoundaryMiddleware(app)(request, None, None))
+            engine.collective_rpc.assert_not_called()
+            app.assert_awaited_once()
+            self.assertEqual(start.call_count, 3, "later requests must not restart an exhausted watcher")
 
     def test_watcher_failure_recovers_and_rescans_on_next_sync(self):
         """A dead watcher is restarted at the next sync_pending, queuing edits made during the outage."""

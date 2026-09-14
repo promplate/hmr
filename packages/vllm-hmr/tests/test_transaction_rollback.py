@@ -11,8 +11,10 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -62,6 +64,96 @@ class TransactionRollbackTests(unittest.TestCase):
         original = os.environ.get(key)
         os.environ[key] = value
         self.addCleanup(lambda: os.environ.__setitem__(key, original) if original is not None else os.environ.pop(key, None))
+
+    def assert_failed_install_can_retry(self, failure: str):
+        from reactivity.hmr import fs
+        from reactivity.hmr.core import ReactiveModule
+
+        previous_filters = list(fs._filters)  # noqa: SLF001 - rollback must preserve other HMR users' registrations
+        previous_finders = list(sys.meta_path)
+        sys.path.insert(0, str(self.root))
+        self.addCleanup(sys.path.remove, str(self.root))
+        self.addCleanup(bootstrap._stop_watcher)  # noqa: SLF001
+        self.set_env("HMR_VLLM_SOURCE_ROOT", str(self.root))
+        with patch(failure, side_effect=RuntimeError("install failed")), self.assertRaisesRegex(RuntimeError, "install failed"):
+            bootstrap.install_from_env()
+        self.assertFalse(bootstrap.state()["installed"])
+        self.assertFalse(bootstrap.state()["watcher_alive"])
+        self.assertIsNone(bootstrap._MANIFEST)  # noqa: SLF001
+        self.assertEqual(bootstrap._FILE_DIGESTS, {})  # noqa: SLF001
+        self.assertEqual(sys.meta_path, previous_finders)
+        self.assertEqual(fs._filters, previous_filters)  # noqa: SLF001
+
+        # A retry may select another source root. A hook from the failed attempt must not keep
+        # making modules outside that new scope reactive, where the new watcher cannot see them.
+        retry_root = self.root / "retry"
+        for relative in scope.REACTIVE_PATHS:
+            path = retry_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# retry scope\n", encoding="utf-8")
+        self.set_env("HMR_VLLM_SOURCE_ROOT", str(retry_root))
+        bootstrap.install_from_env()
+        self.assertTrue(bootstrap.state()["installed"])
+        self.assertTrue(bootstrap.state()["watcher_alive"])
+        old_module = importlib.import_module("vllm.renderers.inputs.preprocess")
+        self.assertNotIsInstance(old_module, ReactiveModule)
+
+    def test_meta_path_failure_allows_a_safe_install_retry(self):
+        self.assert_failed_install_can_retry("reactivity.hmr.core.patch_meta_path")
+
+    def test_watcher_start_failure_allows_a_safe_install_retry(self):
+        self.assert_failed_install_can_retry("threading.Thread.start")
+
+    def test_atexit_registration_failure_allows_a_safe_install_retry(self):
+        self.assert_failed_install_can_retry("atexit.register")
+
+    def test_fork_registration_failure_allows_a_safe_install_retry(self):
+        self.assert_failed_install_can_retry("os.register_at_fork")
+
+    def test_install_rollback_preserves_preexisting_filesystem_filters(self):
+        from reactivity.hmr import fs
+        from reactivity.hmr.core import ReactiveModuleFinder
+
+        previous_filters = list(fs._filters)  # noqa: SLF001
+        self.addCleanup(fs._filters.__setitem__, slice(None), previous_filters)  # noqa: SLF001
+        finder = ReactiveModuleFinder(includes=[str(self.root / "preexisting")])
+        sys.meta_path.insert(0, finder)
+        self.assert_failed_install_can_retry("threading.Thread.start")
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires a real POSIX fork")
+    def test_real_fork_during_install_can_use_the_child_runtime(self):
+        # A fresh interpreter has no callback from an earlier test to accidentally repair this fork.
+        code = textwrap.dedent("""\
+            import os, signal, threading
+            from vllm_hmr.runtime import bootstrap
+            ready, release = threading.Event(), threading.Event()
+            original = bootstrap._reset_digest_baseline
+            def paused(manifest):
+                ready.set()
+                assert release.wait(3)
+                original(manifest)
+            bootstrap._reset_digest_baseline = paused
+            installer = threading.Thread(target=bootstrap.install_from_env, daemon=True)
+            installer.start()
+            assert ready.wait(3)
+            timer = threading.Timer(0.2, release.set)
+            timer.start()
+            pid = os.fork()
+            if pid == 0:
+                signal.alarm(2)
+                bootstrap.install_from_env()
+                state = bootstrap.state()
+                os._exit(0 if state['installed'] and state['watcher_alive'] else 1)
+            _, status = os.waitpid(pid, 0)
+            installer.join(3)
+            timer.join()
+            bootstrap._stop_watcher()
+            assert os.waitstatus_to_exitcode(status) == 0, status
+            print('child runtime usable')
+            """)
+        done = subprocess.run([sys.executable, "-c", code], env=dict(os.environ, HMR_VLLM_SOURCE_ROOT=str(self.root), NO_HMR_DAEMON="1"), capture_output=True, text=True, timeout=10, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("child runtime usable", done.stdout)
 
     def test_target_succeeds_dependent_fails_both_namespaces_roll_back(self):
         """Target load() succeeds, forced dependent load() fails → rollback restores both namespaces."""
@@ -160,9 +252,12 @@ class TransactionRollbackTests(unittest.TestCase):
 
         from reactivity.hmr import hooks
 
-        with patch.object(hooks, "call_pre_reload_hooks", side_effect=RuntimeError("pre hook failed")), patch.object(hooks, "call_post_reload_hooks") as post:
-            with self.assertRaisesRegex(RuntimeError, "pre hook failed"):
-                bootstrap.sync_pending()
+        with (
+            patch.object(hooks, "call_pre_reload_hooks", side_effect=RuntimeError("pre hook failed")),
+            patch.object(hooks, "call_post_reload_hooks") as post,
+            self.assertRaisesRegex(RuntimeError, "pre hook failed"),
+        ):
+            bootstrap.sync_pending()
         post.assert_called_once_with()
         self.assertIn(self.provider.resolve(), bootstrap._PENDING)  # noqa: SLF001
         self.assertEqual(provider_module.extract_prompt_components(), "V1")
