@@ -107,10 +107,6 @@ class TransactionRollbackTests(unittest.TestCase):
     def test_atexit_registration_failure_allows_a_safe_install_retry(self):
         self.assert_failed_install_can_retry("atexit.register")
 
-    @unittest.skipUnless(hasattr(os, "register_at_fork"), "requires os.register_at_fork")
-    def test_fork_registration_failure_allows_a_safe_install_retry(self):
-        self.assert_failed_install_can_retry("os.register_at_fork")
-
     def test_install_rollback_preserves_preexisting_filesystem_filters(self):
         from reactivity.hmr import fs
         from reactivity.hmr.core import ReactiveModuleFinder
@@ -122,20 +118,19 @@ class TransactionRollbackTests(unittest.TestCase):
         self.assert_failed_install_can_retry("threading.Thread.start")
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires a real POSIX fork")
-    def test_real_fork_during_install_can_use_the_child_runtime(self):
-        # A fresh interpreter has no callback from an earlier test to accidentally repair this fork.
+    def test_real_fork_while_install_lock_is_held_can_use_the_child_runtime(self):
+        # Exercise the lock barrier without forking while a watcher thread is importing modules;
+        # CPython explicitly does not promise that arbitrary multi-threaded import state is fork-safe.
         code = textwrap.dedent("""\
             import os, signal, threading
             from vllm_hmr.runtime import bootstrap
             ready, release = threading.Event(), threading.Event()
-            original = bootstrap._reset_digest_baseline
-            def paused(manifest):
-                ready.set()
-                assert release.wait(3)
-                original(manifest)
-            bootstrap._reset_digest_baseline = paused
-            installer = threading.Thread(target=bootstrap.install_from_env, daemon=True)
-            installer.start()
+            def hold_install_lock():
+                with bootstrap._INSTALL_LOCK:
+                    ready.set()
+                    assert release.wait(3)
+            holder = threading.Thread(target=hold_install_lock, daemon=True)
+            holder.start()
             assert ready.wait(3)
             timer = threading.Timer(0.2, release.set)
             timer.start()
@@ -146,9 +141,8 @@ class TransactionRollbackTests(unittest.TestCase):
                 state = bootstrap.state()
                 os._exit(0 if state['installed'] and state['watcher_alive'] else 1)
             _, status = os.waitpid(pid, 0)
-            installer.join(3)
+            holder.join(3)
             timer.join()
-            bootstrap._stop_watcher()
             assert os.waitstatus_to_exitcode(status) == 0, status
             print('child runtime usable')
             """)

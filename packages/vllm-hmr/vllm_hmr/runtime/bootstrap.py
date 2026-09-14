@@ -35,10 +35,17 @@ _WATCHER_RESTARTS = 0
 _FILE_DIGESTS: dict[str, str] = {}  # relative path -> the content digest this process last accounted for
 DEFAULT_MAX_WATCHER_RESTARTS = 3
 
-# Register the fork barrier before any install can hold the lock. Registering only after
-# watcher startup leaves a child forked by another thread with an unfinished install forever.
+
+def _after_fork_child() -> None:
+    _INSTALL_LOCK.release()
+    if _INSTALLED:
+        _after_fork()
+
+
+# Register the barrier before any install can hold the lock. A fork waits for an in-flight
+# install to finish, then the child rebuilds the watcher and locks inherited without threads.
 if register_at_fork := getattr(os, "register_at_fork", None):
-    register_at_fork(before=lambda: _INSTALL_LOCK.acquire(), after_in_parent=lambda: _INSTALL_LOCK.release(), after_in_child=lambda: _INSTALL_LOCK.release())
+    register_at_fork(before=lambda: _INSTALL_LOCK.acquire(), after_in_parent=lambda: _INSTALL_LOCK.release(), after_in_child=_after_fork_child)
 
 
 def max_watcher_restarts() -> int:
@@ -108,8 +115,6 @@ def install_from_env() -> None:
             _start_watcher()
             atexit.register(_stop_watcher)
             exit_registered = True
-            if register_at_fork := getattr(os, "register_at_fork", None):
-                register_at_fork(after_in_child=_after_fork)
         except BaseException:
             _stop_watcher()
             if exit_registered:

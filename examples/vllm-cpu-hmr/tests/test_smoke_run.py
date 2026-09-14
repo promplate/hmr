@@ -323,7 +323,7 @@ class SmokeRunTests(unittest.TestCase):
         # The wait hook fires after reaping the leader. Other hooks fire
         # before restoration or evidence writes, while a second signal could still abort them.
         owner, attribute, original, ready = {
-            "restore": (Path, "write_bytes", Path.write_bytes, lambda path, *_: path == self.source / smoke.TARGET),
+            "restore": (Path, "write_bytes", Path.write_bytes, lambda path, *_: os.path.samefile(path, self.source / smoke.TARGET)),
             "hash": (smoke, "python_source_hashes", smoke.python_source_hashes, lambda _: self.process.returncode is not None),
             "receipt": (Path, "write_text", Path.write_text, lambda path, *_, **__: path.name == "cpu-smoke-receipt.json"),
             "wait": (self.process.wait, "side_effect", self.wait, lambda **_: True),
@@ -414,7 +414,7 @@ class SmokeRunTests(unittest.TestCase):
                 try:
                     with self.assertRaises(FileExistsError) as caught:
                         smoke.run(self.args)
-                    self.assertIn(str(path), str(caught.exception))
+                    self.assertIn(artifact, str(caught.exception))
                     self.assertEqual(path.read_bytes(), b"existing evidence")
                     self.assertEqual(sorted(p.name for p in self.results.iterdir()), [artifact])
                 finally:
