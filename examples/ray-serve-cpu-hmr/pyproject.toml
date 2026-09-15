@@ -1,0 +1,18 @@
+[project]
+name = "ray-serve-cpu-hmr-example"
+version = "0"
+requires-python = ">=3.12"
+# The example runs inside the official Ray CPU image (see run.sh); these are declared for
+# reference and for editors, not installed on the host.
+dependencies = [
+    "ray-serve-hmr",
+    "ray[serve]~=2.58.0",
+    "torch~=2.9.1",
+    "transformers~=4.57.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ray-serve-hmr = { workspace = true }
