@@ -89,6 +89,13 @@ def sync_pending():
     snapshots = []
     try:
         source = target.read_bytes()
+        # syntax_preflight before shape: compile-rejected code (e.g. module-level `return 1`)
+        # parses to valid AST so shape() succeeds, then load() compiles and raises SyntaxError
+        # into sys.excepthook, returning normally — leaving old code while reporting published.
+        try:
+            compile(source, str(target), "exec", dont_inherit=True)
+        except (OSError, SyntaxError, UnicodeError, ValueError) as exc:
+            raise ValueError(f"syntax_preflight: {type(exc).__name__}: {exc}") from None
         if shape(source) != shape(_BASELINE):
             raise ValueError(f"only the body of {CLASS}.{FUNCTION} may change")
         module = get_path_module_map()[target]
