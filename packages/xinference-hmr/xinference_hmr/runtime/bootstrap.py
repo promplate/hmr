@@ -289,7 +289,10 @@ def _watch() -> None:
                     if _FILE_DIGESTS.get(rel) == digest:
                         continue
                     _FILE_DIGESTS[rel] = digest
-                    _PENDING[path] = {"path": rel, "seen_at": now}
+                    # Carry the digest this record describes: the boundary settles the rescan
+                    # baseline from it instead of re-reading the file, so an edit landing after
+                    # publication keeps its own queued record and baseline.
+                    _PENDING[path] = {"path": rel, "seen_at": now, "sha256": digest}
                     event("source_change", path=rel)
     except Exception as exc:
         with _STATE_LOCK:
@@ -530,18 +533,26 @@ def sync_pending(*, force: bool = False) -> dict[str, Any]:
             call_post_reload_hooks()
 
     # Decided items are accounted for, so the rescan baseline must move to what is on disk now.
-    # Published and rejected alike: a rejected file that a later rescan re-queued unchanged would
-    # be re-attempted at every boundary, failing the same way each time.
+    # Published items: the watcher queued them with a digest, reuse that instead of re-reading
+    # — an edit landing after this publication queued its own record with the new digest, and
+    # must not be overwritten by stale re-hashing done outside the lock.
+    # Rejected items: update baseline so an unchanged file is not re-attempted at every boundary.
+    # Read + write inside the same lock acquisition to avoid read-then-write races with watcher.
     assert _MANIFEST is not None  # still holds; the prior assert survived exception paths
-    for item in (*published, *rejected):
-        relative = item.get("path")
-        if not isinstance(relative, str) or relative not in _MANIFEST.reactive_paths:
-            continue
-        try:
-            digest = sha256(_MANIFEST.path_for(relative))
-        except ScopeError:
-            continue
-        with _STATE_LOCK:
+    with _STATE_LOCK:
+        for item in published:
+            relative = item.get("path")
+            digest = item.get("sha256")
+            if isinstance(relative, str) and isinstance(digest, str):
+                _FILE_DIGESTS[relative] = digest
+        for item in rejected:
+            relative = item.get("path")
+            if not isinstance(relative, str) or relative not in _MANIFEST.reactive_paths:
+                continue
+            try:
+                digest = sha256(_MANIFEST.path_for(relative))
+            except ScopeError:
+                continue
             _FILE_DIGESTS[relative] = digest
     for item in published:
         event("published", **item)

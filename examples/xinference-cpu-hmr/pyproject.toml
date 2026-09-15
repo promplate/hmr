@@ -1,0 +1,9 @@
+[project]
+name = "xinference-cpu-hmr-example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["xinference-hmr"]
+
+[tool.pytest.ini_options]
+# `smoke` and `mutations` are top-level modules in this directory, not an installed package.
+pythonpath = ["."]
