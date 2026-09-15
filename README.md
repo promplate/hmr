@@ -53,6 +53,7 @@ HMR provides a rich ecosystem of tools for different Python development scenario
 | [`mcp-hmr`](./packages/mcp-hmr/)                   | HMR-enabled MCP / FastMCP servers                                   |
 | [`hmr-daemon`](./packages/hmr-daemon/)             | Background daemon that refreshes modules on changes                 |
 | [`fastapi-reloader`](./packages/fastapi-reloader/) | Browser auto-refresh middleware for automatic page reloading        |
+| [`bentoml-hmr`](./packages/bentoml-hmr/)           | HMR-enabled BentoML services with worker-level hot reload           |
 
 > [!TIP]
 > The hmr ecosystem is essentially stable and production-ready for most use cases. It has been carefully designed to handle many common edge cases and Pythonic _magic_ patterns, including lazy imports, dynamic imports, module-level `__getattr__`, decorators, and more. However, circular dependencies in some edge cases may still cause unexpected behavior. Use with caution if you have a lot of code in `__init__.py`.
