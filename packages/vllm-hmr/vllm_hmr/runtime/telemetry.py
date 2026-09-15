@@ -17,12 +17,14 @@ from pathlib import Path
 from typing import Any
 
 _LOCK = threading.RLock()
+_SINK_LOCK = threading.RLock()  # separate from `_LOCK`: filesystem I/O must not delay `scope_enter`/`scope_exit`/`active_scopes`, which are the boundary's interlock
 _STARTED = time.monotonic()
 _EVENTS: deque[dict[str, Any]] = deque(maxlen=200)
 _ACTIVE_SCOPES = 0
 _EVENT_LOG: Path | None = None
 _EVENT_LOG_KEY: tuple[int, str | None] | None = None
 _EVENT_LOG_ERROR: str | None = None
+_SINK_DISABLED = False  # module-local, not an `os.environ` deletion: a child spawned after this failure must still get its own chance at its own filesystem
 
 
 def event_log() -> Path | None:
@@ -37,31 +39,36 @@ def event_log() -> Path | None:
     must be honoured rather than fixed by whichever event happened to fire first.
     """
     global _EVENT_LOG, _EVENT_LOG_KEY
-    directory = os.getenv("HMR_VLLM_EVENT_LOG_DIR")
-    key = (os.getpid(), directory)
-    if key != _EVENT_LOG_KEY:
-        if directory:
-            Path(directory).mkdir(parents=True, exist_ok=True)
-            _EVENT_LOG = Path(directory) / f"hmr-events-{key[0]}.jsonl"
-        else:
-            _EVENT_LOG = None
-        _EVENT_LOG_KEY = key
-    return _EVENT_LOG
+    with _SINK_LOCK:
+        if _SINK_DISABLED:
+            return None
+        directory = os.getenv("HMR_VLLM_EVENT_LOG_DIR")
+        key = (os.getpid(), directory)
+        if key != _EVENT_LOG_KEY:
+            if directory:
+                Path(directory).mkdir(parents=True, exist_ok=True)
+                _EVENT_LOG = Path(directory) / f"hmr-events-{key[0]}.jsonl"
+            else:
+                _EVENT_LOG = None
+            _EVENT_LOG_KEY = key
+        return _EVENT_LOG
 
 
 def _event_log_quietly() -> Path | None:
     """`event_log` for a reader: reporting where events go must not itself fail on an unusable directory."""
-    try:
-        return event_log()
-    except OSError:
-        return None
+    with _SINK_LOCK:
+        try:
+            return event_log()
+        except OSError:
+            return None
 
 
 def event(kind: str, **fields: Any) -> None:
-    global _EVENT_LOG_ERROR
+    global _EVENT_LOG_ERROR, _SINK_DISABLED
     record = {"t": time.monotonic(), "kind": kind, **fields}
-    with _LOCK:
+    with _LOCK:  # the in-memory ring only; the sink below runs under `_SINK_LOCK` so a stalled filesystem cannot hold up the boundary interlock
         _EVENTS.append(record)
+    with _SINK_LOCK:
         try:
             if (path := event_log()) is not None:
                 # Opened per event and closed again, rather than held: a reader must find a complete
@@ -71,9 +78,12 @@ def event(kind: str, **fields: Any) -> None:
         except OSError as exc:
             # This sink is diagnostics; the callers are the watcher thread and the publication path.
             # An unwritable directory must turn the sink off and say so in the state a reader can
-            # still reach, not kill the watcher and take HMR down with it.
+            # still reach, not kill the watcher and take HMR down with it. Turned off in module
+            # state, not by unsetting the variable: `sitecustomize` runs before vLLM spawns its
+            # engine-core and worker children, so popping it here would silence descendants whose
+            # own filesystem is perfectly writable.
             _EVENT_LOG_ERROR = f"{type(exc).__name__}: {exc}"
-            os.environ.pop("HMR_VLLM_EVENT_LOG_DIR", None)
+            _SINK_DISABLED = True
 
 
 def scope_enter() -> None:
@@ -95,20 +105,31 @@ def active_scopes() -> int:
 
 def reset_after_fork() -> None:
     """A lock held by another thread at fork time is locked forever in the child."""
-    global _LOCK, _ACTIVE_SCOPES
+    global _LOCK, _SINK_LOCK, _ACTIVE_SCOPES, _EVENT_LOG, _EVENT_LOG_KEY, _EVENT_LOG_ERROR, _SINK_DISABLED
     _LOCK = threading.RLock()
+    _SINK_LOCK = threading.RLock()
     _ACTIVE_SCOPES = 0  # no HTTP request survives a fork, so nothing is in flight here
+    _EVENT_LOG = None  # PID changed: cache is stale even though it's PID-keyed
+    _EVENT_LOG_KEY = None
+    _EVENT_LOG_ERROR = None  # child gets its own chance at its own filesystem
+    _SINK_DISABLED = False
 
 
 def snapshot() -> dict[str, Any]:
+    # Sink state read first, outside `_LOCK`: `_event_log_quietly` takes `_SINK_LOCK` and may
+    # `mkdir`, and taking `_LOCK` around that would reintroduce the filesystem stall this
+    # separation exists to keep away from `scope_enter`/`scope_exit`/`active_scopes`.
+    path = _event_log_quietly()
+    with _SINK_LOCK:
+        event_log_error = _EVENT_LOG_ERROR
     with _LOCK:
         return {
             "pid": os.getpid(),
             "uptime_s": time.monotonic() - _STARTED,
             "active_scopes": _ACTIVE_SCOPES,
             "events": list(_EVENTS),
-            "event_log": None if (path := _event_log_quietly()) is None else str(path),
-            "event_log_error": _EVENT_LOG_ERROR,
+            "event_log": None if path is None else str(path),
+            "event_log_error": event_log_error,
             "source_root": os.getenv("HMR_VLLM_SOURCE_ROOT"),
             "orig_argv": sys.orig_argv,
         }

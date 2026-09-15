@@ -35,6 +35,7 @@ _WATCHER_RESTARTS = 0
 _WATCH_GENERATION = 0
 _FILE_DIGESTS: dict[str, str] = {}  # relative path -> the content digest this process last accounted for
 DEFAULT_MAX_WATCHER_RESTARTS = 3
+DEFAULT_DEBOUNCE_MS = 300
 NON_RETRYABLE_REJECTION_PREFIXES = ("not loaded from this source root", "not in manifest auto_paths")
 
 
@@ -65,6 +66,21 @@ def max_watcher_restarts() -> int:
     except ValueError:
         return DEFAULT_MAX_WATCHER_RESTARTS
     return value if value >= 0 else DEFAULT_MAX_WATCHER_RESTARTS
+
+
+def debounce_ms() -> int:
+    """Watcher debounce window in milliseconds, overridable via `HMR_VLLM_DEBOUNCE_MS`.
+
+    An unparsable or non-positive value falls back to the default rather than killing the watcher.
+    """
+    raw = os.getenv("HMR_VLLM_DEBOUNCE_MS")
+    if not raw:
+        return DEFAULT_DEBOUNCE_MS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_DEBOUNCE_MS
+    return value if value > 0 else DEFAULT_DEBOUNCE_MS
 
 
 def _is_model_registry_inspector() -> bool:
@@ -326,7 +342,7 @@ def _watch(manifest: Manifest, stop_event: threading.Event, generation: int) -> 
         watch_paths = [str(source_root / relative) for relative in sorted(manifest.reactive_paths)]
         for changes in watch(
             *watch_paths,
-            debounce=int(os.getenv("HMR_VLLM_DEBOUNCE_MS", "300")),
+            debounce=debounce_ms(),
             step=50,
             stop_event=stop_event,
         ):

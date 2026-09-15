@@ -41,7 +41,19 @@ On `serve` — and only on `serve` — two real vLLM 0.28 flags are appended:
 | `--middleware` | `vllm_hmr.runtime.middleware.HMRBoundaryMiddleware` | publishes changes between requests, never inside one |
 | `--worker-extension-cls` | `vllm_hmr.runtime.worker.HMRWorkerExtension` | lets each worker process reload its own modules |
 
-If you pass either flag yourself (in `--flag value` or `--flag=value` form), yours wins and ours is dropped: no flag is ever supplied twice. Tokens after `--` are left alone, and injection lands before them. Other subcommands (`chat`, `complete`, `bench`, …) are forwarded completely untouched, with no HMR environment exported.
+The two flags behave differently in vLLM, so the wrapper treats them differently.
+
+**`--middleware` composes.** It is declared `action="append"` in vLLM 0.28's `entrypoints/openai/cli_args.py`, so your middleware and HMR's boundary middleware both get installed, in argv order. Passing your own does not turn HMR off; the HMR value is appended alongside it unless that exact value is already present in your argv.
+
+**`--worker-extension-cls` is a single string**, mixed into the resolved worker class's bases. There is no composition, so:
+
+- You pass nothing → the packaged `HMRWorkerExtension` is injected, HMR active.
+- You pass a **subclass of** `vllm_hmr.runtime.worker.HMRWorkerExtension` → your class is kept and HMR stays active. It inherits `vllm_hmr_sync_pending`, which is the RPC name the middleware fans out to, so both your methods and the publication contract survive. This is what `examples/vllm-cpu-hmr` does with `hmr_vllm_probe.worker.HMRProbeWorkerExtension`.
+- You pass anything else — an unrelated class, an unimportable module, a missing attribute, a `--worker-extension-cls` with no value → **HMR is disabled for the whole launch**: your argv is forwarded untouched, neither flag is injected, and no HMR environment is exported (an inherited activation is stripped too). Without the RPC name, every `/v1/` request would fan out to a method the workers do not have and get a 503 — turning the whole server off is not a better answer than not reloading.
+
+The compatibility check imports the class in the wrapper, before `execve`. That is not extra risk: vLLM imports the same class moments later in the process this wrapper `exec`s, so an import error surfaces here as a clean CLI decision instead of a stack trace inside vLLM's startup.
+
+Tokens after `--` are left alone, and injection lands before them. Other subcommands (`chat`, `complete`, `bench`, …) are forwarded completely untouched, with no HMR environment exported.
 
 ### HMR options
 
@@ -59,6 +71,7 @@ Three runtime-only controls are environment variables rather than CLI arguments:
 
 - `HMR_VLLM_RPC_TIMEOUT_S` bounds the wait for worker publication RPCs in seconds (default `30`; non-positive or invalid values use the default). When a fan-out exceeds this deadline, the middleware returns HTTP 503 to the current request but preserves the background task so the next request can read its outcome instead of guessing. While the task is running, inference requests stay at 503 (fail-closed); health and metrics requests passthrough without entering the boundary lock, so they are never blocked. Once the task finishes, its result decides whether to serve or requeue: success permits inference, failure requeues the published records and continues returning 503 until a later boundary succeeds.
 - `HMR_VLLM_MAX_WATCHER_RESTARTS` limits consecutive watcher recovery attempts (default `3`; a successful healthy boundary resets the budget). Recovery rescans content hashes so edits made while the watcher was down are not lost; exhaustion marks HMR unavailable and leaves pending edits undrained.
+- `HMR_VLLM_DEBOUNCE_MS` sets the watcher's debounce window in milliseconds (default `300`; non-positive or unparsable values use the default rather than failing the watcher, which would otherwise report a configuration typo as "watcher failed" and spend the recovery budget on it).
 - `HMR_VLLM_EVENT_LOG_DIR` makes each process append its runtime events to `<dir>/hmr-events-<pid>.jsonl` (off by default). This is the only way to observe a queued change out of band: publication happens at request boundaries, so an HTTP request that asks whether something is queued is itself the boundary that publishes it. Reading the file instead leaves the server untouched — which is how the CPU smoke waits for every watcher before sending the one request that must publish.
 
 ## How it works
@@ -68,6 +81,8 @@ Three runtime-only controls are environment variables rather than CLI arguments:
 3. The shim invokes the runtime, which validates the manifest, installs the [pyth-on-line](https://github.com/promplate/pyth-on-line) reactive import hook for the in-scope files only, and starts a watcher.
 4. Subprocesses inherit the environment, so workers get the same early injection. vLLM's short-lived model-registry inspector is detected and left watcher-free; `HMR_VLLM_SKIP=1` suppresses injection for any process that must not have it.
 5. On a file change the watcher only queues the change. Publication happens in the middleware, between requests: the API process reloads, then asks the workers to do the same via RPC on eligible inference request boundaries (paths beginning with `/v1/`). Every other path — health, metrics, anything outside `/v1/` — is passed through before the boundary lock is taken, so it neither fans out nor waits on one that is stuck. A request in flight blocks publication, so no single request sees two versions of the same module. Request boundaries are serialised against each other, so two requests arriving together cannot both decide that nothing is in flight; the requests themselves stay concurrent.
+
+   The non-`/v1/` passthrough is a lock and fan-out exemption, not a latency guarantee. Publication itself is synchronous: a boundary that reloads modules, runs `hmr`'s reload hooks, or joins a dead watcher thread (up to 5 s) occupies the event-loop thread, and every other coroutine — including a passed-through `/health` — is not scheduled until it returns. In practice this is a two-file re-exec on a boundary that only fires after an edit, so the window is short and rare, but it is real. It is deliberately not moved to `asyncio.to_thread`: publication mutates module namespaces the passthrough request may be executing code from, and `hmr` offers no thread-safety guarantee, so trading a brief stall for concurrent module mutation would break the one invariant this design exists to hold — one request, one version.
 
 The fan-out is bounded by `HMR_VLLM_RPC_TIMEOUT_S` on the API side, because vLLM 0.28's `UniProcExecutor.collective_rpc` accepts a `timeout` and never reads it. Exceeding that deadline is not a cancellation: the fan-out keeps running and is handed to the next request boundary, which reads its real result — an abandoned fan-out could otherwise publish in a worker at an instant the API process no longer tracks, which is the version skew the boundary exists to prevent. Until that outcome is known, `/v1/` requests are refused with a structured 503 rather than served across an unverified worker set, and a client disconnecting mid-fan-out is handled the same way. A confirmed failure requeues what the API published so a later boundary re-attempts it; only a confirmed success serves inference.
 

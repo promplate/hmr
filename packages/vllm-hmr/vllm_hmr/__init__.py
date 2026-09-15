@@ -6,8 +6,10 @@ forwarded unchanged and the official `vllm` entrypoint is `exec`'d, so the serve
 keeps this process's PID, signal handling, and exit code.
 
 On `serve`, the wrapper appends the two vLLM flags its runtime needs
-(`--middleware` and `--worker-extension-cls`), unless you already passed them.
-No other subcommand is touched, and no flag is ever injected twice.
+(`--middleware`, which vLLM appends rather than replaces, and
+`--worker-extension-cls`, which it does not). Custom middleware composes with ours;
+a worker extension that is not an `HMRWorkerExtension` subclass turns HMR off for
+the whole launch rather than half-installing it. No other subcommand is touched.
 
 The runtime itself lives in `vllm_hmr.runtime` and watches exactly two files
 (see `vllm_hmr.runtime.scope`). It does not watch the whole vLLM tree, and it
@@ -40,9 +42,20 @@ enabled by default for `serve`. Your vLLM arguments are forwarded unchanged.
 
   vllm-hmr serve facebook/opt-125m --port 8000
 
-On `serve`, these vLLM flags are appended unless you passed them yourself:
+On `serve`, these two vLLM flags are appended when HMR is active:
   --middleware            vllm_hmr.runtime.middleware.HMRBoundaryMiddleware
   --worker-extension-cls  vllm_hmr.runtime.worker.HMRWorkerExtension
+
+Middleware composition: vLLM 0.28 --middleware is action=append, so custom middleware
+composes with HMR's boundary middleware. Both are installed unless the HMR middleware
+value already appears in your argv.
+
+Worker extension compatibility: --worker-extension-cls is a single string. If you pass
+a subclass of HMRWorkerExtension (e.g. hmr_vllm_probe.worker.HMRProbeWorkerExtension),
+your class is kept and HMR stays active, preserving both your methods and the RPC
+contract the middleware depends on. If the class is incompatible or cannot be resolved,
+HMR is disabled for the whole launch: your argv is forwarded untouched, no HMR flags
+are injected, and no HMR environment is exported.
 
 Source root: an editable/source vLLM checkout is detected automatically. A
 site-packages install cannot be edited in place, so it is an error there; pass
@@ -149,24 +162,91 @@ def has_flag(forwarded: list[str], flag: str) -> bool:
     return any(arg == flag or arg.startswith(f"{flag}=") for arg in forwarded[:stop])
 
 
-def inject_vllm_flags(forwarded: list[str]) -> list[str]:
-    """Append the two flags the runtime needs, without duplicating the user's own.
+def option_values(forwarded: list[str], *flags: str) -> list[str | None]:
+    """Values supplied for `flags` before `--`; malformed occurrences are represented by `None`."""
+    stop = forwarded.index("--") if "--" in forwarded else len(forwarded)
+    values: list[str | None] = []
+    index = 0
+    while index < stop:
+        arg = forwarded[index]
+        matched = next((flag for flag in flags if arg == flag or arg.startswith(f"{flag}=")), None)
+        if matched is None:
+            index += 1
+        elif arg != matched:
+            values.append(arg.partition("=")[2] or None)
+            index += 1
+        elif index + 1 < stop and not forwarded[index + 1].startswith("-"):
+            values.append(forwarded[index + 1])
+            index += 2
+        else:
+            values.append(None)
+            index += 1
+    return values
 
-    Both are real vLLM 0.28 options (`--middleware` in `entrypoints/openai/cli_args.py`,
-    `--worker-extension-cls` in `engine/arg_utils.py`). If the user already named one,
-    theirs wins and ours is dropped: vLLM would otherwise see a conflicting value, and
-    silently overriding a user's middleware chain is worse than not reloading.
+
+def option_value(forwarded: list[str], *flags: str) -> str | None:
+    """The last value vLLM's single-valued parser would receive, or `None`."""
+    values = option_values(forwarded, *flags)
+    return values[-1] if values else None
+
+
+def is_hmr_worker_extension(qualname: str) -> bool:
+    """Whether `qualname` names a class that keeps the `vllm_hmr_sync_pending` RPC the middleware fans out to.
+
+    Imported for real, here in the wrapper. That is not extra risk: vLLM resolves this same
+    string moments later in the process this wrapper `exec`s, so anything that fails here would
+    have failed there — and here it is a clean CLI decision instead of a 503 per request from a
+    worker set that never had the method. Any failure at all answers "no": the point is whether
+    the contract survives, and an unimportable module cannot promise that.
     """
-    if "--" in forwarded:  # everything after `--` is vLLM's business; append before it
+    if qualname == WORKER_EXTENSION:
+        return True
+    module_name, _, class_name = qualname.rpartition(".")
+    if not module_name or not class_name:
+        return False
+    from importlib import import_module
+
+    from vllm_hmr.runtime.worker import HMRWorkerExtension
+
+    try:
+        candidate = getattr(import_module(module_name), class_name, None)
+    except Exception:
+        return False
+    return isinstance(candidate, type) and issubclass(candidate, HMRWorkerExtension)
+
+
+def _prepare_vllm_flags(forwarded: list[str]) -> tuple[list[str], bool]:
+    """Add the flags the runtime needs and report whether HMR survived the user's own.
+
+    The two flags are not symmetric in vLLM 0.28, so they are not treated symmetrically here.
+    `--middleware` is declared `action="append"` (`entrypoints/openai/cli_args.py`), so a user's
+    middleware and ours both get installed and a custom one costs nothing. `--worker-extension-cls`
+    is a single string mixed into the worker's bases (`engine/arg_utils.py`), so there is no
+    composing: a subclass of `HMRWorkerExtension` keeps both the user's methods and the RPC name
+    the middleware publishes through, while anything else would leave every `/v1/` boundary
+    fanning out to a method the workers do not have — a 503 per request. That case returns the
+    user's argv untouched and `False`, which is what turns HMR off for the whole launch.
+    """
+    if "--" in forwarded:
         head, tail = forwarded[: forwarded.index("--")], forwarded[forwarded.index("--") :]
     else:
         head, tail = list(forwarded), []
+    extension_flags = ("--worker-extension-cls", "--worker_extension_cls")
+    given = any(has_flag(forwarded, flag) for flag in extension_flags)
+    extension = option_value(forwarded, *extension_flags)
+    if given and (extension is None or not is_hmr_worker_extension(extension)):
+        return list(forwarded), False
     extra: list[str] = []
-    if not has_flag(forwarded, "--middleware"):
+    if MIDDLEWARE not in option_values(forwarded, "--middleware"):
         extra += ["--middleware", MIDDLEWARE]
-    if not (has_flag(forwarded, "--worker-extension-cls") or has_flag(forwarded, "--worker_extension_cls")):
+    if not given:
         extra += ["--worker-extension-cls", WORKER_EXTENSION]
-    return [*head, *extra, *tail]
+    return [*head, *extra, *tail], True
+
+
+def inject_vllm_flags(forwarded: list[str]) -> list[str]:
+    """Append a complete compatible HMR integration, preserving the original public helper shape."""
+    return _prepare_vllm_flags(forwarded)[0]
 
 
 def _same_path(left: str | Path, right: str | Path) -> bool:
@@ -261,10 +341,11 @@ def build_exec(argv: list[str], base: dict[str, str], which: Callable[[str], str
     """Resolve everything needed for `execve` without touching the process."""
     options, print_env, forwarded = split_argv(argv)
     serve = is_serve(forwarded)
-    if serve and not is_disabled(options, base):
-        forwarded = inject_vllm_flags(forwarded)
+    hmr = serve and not is_disabled(options, base)
+    if hmr:
+        forwarded, hmr = _prepare_vllm_flags(forwarded)
     executable = resolve_vllm(which)
-    env = build_env(options, base, serve=serve)
+    env = build_env(options, base, serve=hmr)
     return executable, ["vllm", *forwarded], env, print_env
 
 
