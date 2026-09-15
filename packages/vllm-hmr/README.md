@@ -101,7 +101,7 @@ If a target or forced dependent raises while reloading, the runtime restores the
 
 ## Capability limits
 
-The evidence behind this package is one smoke test: vLLM **0.28.0+cpu** on the official `vllm/vllm-openai-cpu:v0.28.0-x86_64` image, one server instance with separate API and worker processes, one request path. A stacked example PR will add `examples/vllm-cpu-hmr`, which launches through this CLI and asserts that the target function is replaced while API and worker PIDs, the model object, and its parameter pointers stay unchanged.
+The evidence behind this package is one smoke test: vLLM **0.28.0+cpu** on the official `vllm/vllm-openai-cpu:v0.28.0-x86_64` image, one server instance with separate API and worker processes, one request path. See [`examples/vllm-cpu-hmr`](../../examples/vllm-cpu-hmr), which launches through this CLI and asserts that the target function is replaced while API and worker PIDs, the model object, and its parameter pointers stay unchanged.
 
 Verified:
 
@@ -130,3 +130,4 @@ MIT
 - [Homepage](https://github.com/promplate/hmr)
 - [Documentation](https://hmr.promplate.dev)
 - [Repository](https://github.com/promplate/hmr/tree/HEAD/packages/vllm-hmr)
+- [Working example: vllm-cpu-hmr](../../examples/vllm-cpu-hmr)
