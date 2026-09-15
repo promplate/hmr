@@ -1,0 +1,8 @@
+[project]
+name = "bentoml-cpu-hmr"
+version = "0"
+requires-python = ">=3.12"
+dependencies = ["bentoml-hmr", "openai", "torch", "transformers"]
+
+[tool.uv.sources]
+bentoml-hmr = { workspace = true }
