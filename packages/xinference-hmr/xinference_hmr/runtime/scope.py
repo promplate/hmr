@@ -17,7 +17,6 @@ class -- exactly the outcome this package refuses to call HMR.
 
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
 from dataclasses import dataclass
@@ -190,9 +189,17 @@ def write_manifest(manifest: Manifest, path: Path) -> Path:
 
 
 def syntax_preflight(path: Path) -> tuple[bool, str | None]:
-    """Never hand a half-written file to the loader: a SyntaxError there is unrecoverable."""
+    """Never hand a half-written file to the loader: a SyntaxError there is unrecoverable.
+
+    `compile()`, not `ast.parse()`: the loader compiles, and `compile` rejects a strict
+    superset of what `ast.parse` rejects. Module-level `return`/`await`/`break`/`continue`,
+    a duplicate argument name and a module-level `nonlocal` all build a valid AST and only
+    fail when compiled, so an `ast.parse` guard passes them to `ReactiveModule.__load`,
+    whose `compile` raises `SyntaxError` into `sys.excepthook` and returns normally --
+    leaving the namespace on the old code while this publication reports success.
+    """
     try:
-        ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError, UnicodeError) as exc:
+        compile(path.read_text(encoding="utf-8"), str(path), "exec", dont_inherit=True)
+    except (OSError, SyntaxError, UnicodeError, ValueError) as exc:
         return False, f"{type(exc).__name__}: {exc}"
     return True, None
