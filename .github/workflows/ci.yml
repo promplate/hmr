@@ -48,6 +48,7 @@ jobs:
           - fastapi-reloader
           - hmr-daemon
           - mcp-hmr
+          - vllm-hmr
       fail-fast: false
     needs: [typos, check]
     permissions:

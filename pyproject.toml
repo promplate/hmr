@@ -8,6 +8,7 @@ dependencies = [
     "mcp-hmr",
     "ruff~=0.15.4",
     "uvicorn-hmr",
+    "vllm-hmr",
 ]
 
 [tool.uv.workspace]
@@ -17,6 +18,7 @@ members = ["examples/*", "packages/*"]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }
 mcp-hmr = { workspace = true }
+vllm-hmr = { workspace = true }
 
 [tool.pyright]
 typeCheckingMode = "standard"
