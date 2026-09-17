@@ -75,6 +75,16 @@ uvicorn-hmr main:app
 
 Everything will work as-expected, but with **hot** module reloading.
 
+## Manual reload
+
+On Unix, send `SIGHUP` to the `uvicorn-hmr` process to reload all loaded modules and tracked files within the configured watch paths:
+
+```sh
+kill -HUP <pid>
+```
+
+This uses the same HMR pipeline as file changes, even when file contents have not changed. Signals received during that reload are coalesced. The process PID stays the same; if the ASGI app changes, Uvicorn gracefully drains in-flight requests before restarting the server in that process. Existing include/exclude paths still apply. Windows does not support `SIGHUP`.
+
 ## CLI Arguments
 
 I haven't copied all the configurable options from `uvicorn`. But contributions are welcome!
