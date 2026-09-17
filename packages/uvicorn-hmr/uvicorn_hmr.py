@@ -1,6 +1,9 @@
+import signal
 import sys
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
+from threading import current_thread, main_thread
 from time import time
 from typing import TYPE_CHECKING, Annotated, override
 
@@ -52,11 +55,10 @@ def main(
             fg="red",
         )
 
-    from asyncio import FIRST_COMPLETED, Event, Future, ensure_future, run, sleep, wait
+    from asyncio import FIRST_COMPLETED, CancelledError, Event, Future, ensure_future, get_running_loop, run, sleep, wait
     from functools import cache, wraps
     from importlib import import_module
     from logging import getLogger
-    from signal import SIGINT
 
     from reactivity import state
     from reactivity.hmr.core import HMR_CONTEXT, AsyncReloader, ReactiveModule, is_relative_to_any
@@ -105,9 +107,23 @@ def main(
             await self.__run_effect()
             call_post_reload_hooks()
             self.__reloader_task = ensure_future(self.start_watching())
+            self.__sighup = getattr(signal, "SIGHUP", None) if current_thread() is main_thread() else None
+            if self.__sighup is not None:
+                self.__previous_sighup = signal.getsignal(self.__sighup)
+                self.__sighup_requested = Event()
+                self.__sighup_task = ensure_future(self.watch_sighup())
+                # HMR needs a task context; coalesce signals received during an active reload.
+                get_running_loop().add_signal_handler(self.__sighup, self.__sighup_requested.set)
             return self
 
         async def __aexit__(self, *_):
+            if self.__sighup is not None:
+                get_running_loop().remove_signal_handler(self.__sighup)
+                if self.__previous_sighup is not None:
+                    signal.signal(self.__sighup, self.__previous_sighup)
+                self.__sighup_task.cancel()
+                with suppress(CancelledError):
+                    await self.__sighup_task
             self.stop_watching()
             self.__run_effect.dispose()
             await self.__reloader_task
@@ -116,12 +132,26 @@ def main(
             await main_loop_started.wait()
             return await super().start_watching()
 
+        async def watch_sighup(self):
+            while True:
+                await self.__sighup_requested.wait()
+                self.on_sighup()
+                await self._run()
+                await main_loop_started.wait()
+                self.__sighup_requested.clear()
+
+        def on_sighup(self):
+            watched = [Path(p).resolve() for p in self.includes]
+            ignored = [Path(p).resolve() for p in self.excludes]
+            files = set(ReactiveModule.instances) | {path for path, s in fs_signals.items() if s.subscribers}
+            self.on_changes({path for path in files if is_relative_to_any(path, watched) and not is_relative_to_any(path, ignored)}, source="SIGHUP")
+
         @override
-        def on_changes(self, files: set[Path]):
+        def on_changes(self, files: set[Path], *, source: str = "Watchfiles"):
             if files.intersection(ReactiveModule.instances) or files.intersection(path for path, s in fs_signals.items() if s.subscribers):
                 if clear:
                     print("\033c", end="", flush=True)
-                logger.warning("Watchfiles detected changes in %s. Reloading...", ", ".join(map(_display_path, files)))
+                logger.warning("%s triggered reload of %s.", source, ", ".join(map(_display_path, files)))
                 nonlocal need_restart
                 need_restart = True
                 return super().on_changes(files)
@@ -147,7 +177,7 @@ def main(
             should_exit = state(False, context=HMR_CONTEXT)  # noqa: FBT003
 
             def handle_exit(self, sig, frame):
-                if self.force_exit and sig == SIGINT:
+                if self.force_exit and sig == signal.SIGINT:
                     raise KeyboardInterrupt  # allow immediate shutdown on third interrupt
                 return super().handle_exit(sig, frame)
 
