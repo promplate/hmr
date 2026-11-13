@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: ${{ matrix.py }}
           activate-environment: true
+      # Lupa's LuaJIT source build needs the MSVC environment on Python 3.15.
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows' && matrix.py == '3.15'
       - name: Install dependencies
         run: |
             uv sync --all-packages
