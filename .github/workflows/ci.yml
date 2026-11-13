@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu, macos, windows]
-        py: ["3.12", "3.13", "3.14"]
+        py: ["3.12", "3.13", "3.14", "3.15"]
       fail-fast: false
     runs-on: ${{ matrix.os }}-latest
     steps:
@@ -26,7 +26,15 @@ jobs:
         with:
           python-version: ${{ matrix.py }}
           activate-environment: true
+      # Lupa's LuaJIT source build needs the MSVC environment on Python 3.15.
+      - name: Install dependencies with MSVC
+        if: runner.os == 'Windows' && matrix.py == '3.15'
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          & "$vs\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          uv sync --all-packages
       - name: Install dependencies
+        if: runner.os != 'Windows' || matrix.py != '3.15'
         run: |
             uv sync --all-packages
       - name: Linting
