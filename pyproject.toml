@@ -17,6 +17,7 @@ members = ["examples/*", "packages/*"]
 uvicorn-hmr = { workspace = true }
 fastapi-reloader = { workspace = true }
 mcp-hmr = { workspace = true }
+xinference-hmr = { workspace = true }
 
 [tool.pyright]
 typeCheckingMode = "standard"
