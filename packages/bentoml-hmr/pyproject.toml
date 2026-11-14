@@ -1,0 +1,13 @@
+[project]
+name = "bentoml-hmr"
+version = "0.0.0"
+description = "Request-boundary HMR for a modern BentoML service worker"
+requires-python = ">=3.12"
+dependencies = ["hmr==0.7.6.2", "bentoml>=1.4.39"]
+
+[project.scripts]
+bentoml-hmr = "bentoml_hmr:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
