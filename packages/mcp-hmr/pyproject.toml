@@ -12,7 +12,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "fastmcp>=2.2.0,<3",
     "hmr~=0.7.0",
 ]
 dynamic = ["version"]
