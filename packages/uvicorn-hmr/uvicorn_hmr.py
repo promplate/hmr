@@ -76,10 +76,12 @@ def main(
             self._run = HMR_CONTEXT.async_derived(self.__run)
 
         async def __run(self):
+            nonlocal need_restart
             if server:
                 logger.warning("Application '%s' has changed. Restarting server...", slug)
                 self.ready.clear()
                 await main_loop_started.wait()
+                need_restart = True  # serve again once this reload-driven shutdown finishes
                 server.should_exit = True
                 await finish.wait()
             with self.error_filter:
@@ -122,8 +124,6 @@ def main(
                 if clear:
                     print("\033c", end="", flush=True)
                 logger.warning("Watchfiles detected changes in %s. Reloading...", ", ".join(map(_display_path, files)))
-                nonlocal need_restart
-                need_restart = True
                 return super().on_changes(files)
 
     main_loop_started = Event()
