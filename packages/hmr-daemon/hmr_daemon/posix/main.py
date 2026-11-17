@@ -3,7 +3,7 @@ from functools import wraps
 from os import getenv
 from pathlib import Path
 from subprocess import Popen, TimeoutExpired
-from threading import Event, Lock, Thread, local
+from threading import Event, Lock, Thread
 
 from reactivity.hmr import __file__ as hmr_file
 from reactivity.hmr.core import BaseReloader, ErrorFilter, ReactiveModuleLoader, SyncReloader, patch_meta_path
@@ -32,18 +32,12 @@ excludes = (venv,) if (venv := getenv("VIRTUAL_ENV")) else ()
 # Patch import machinery early
 patch_meta_path(excludes=excludes)
 
-# State for first patch decision
-(state := local()).disabled = False
-
-
 # Preserve original __init__ so we can disable after first construction
 def patch(process: Popen):
     global original_init
 
     @wraps(original_init := BaseReloader.__init__)
     def wrapper(*args, **kwargs):
-        if getattr(state, "disabled", False):
-            return original_init(*args, **kwargs)
         # A callback may need this thread (for example, an import lock).
         # Reject a busy handoff rather than blocking or allowing both reloaders.
         if not reload_lock.acquire(blocking=False):
@@ -119,7 +113,6 @@ def _watch(process: Popen):
 
 def run_reloader(process: Popen):
     def watch():
-        state.disabled = True
         try:
             _watch(process)
         finally:
