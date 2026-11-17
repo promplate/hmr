@@ -18,6 +18,7 @@ import asyncio
 import builtins
 import json
 import os
+import time
 from pathlib import Path
 from reactivity.hmr.fs import track
 
@@ -36,8 +37,13 @@ async def app(scope, receive, send):
         n = builtins.starts
         state.update(value=config.read_text(), pid=os.getpid(), starts=n)
         Path(f"started-{n}").write_text(str(os.getpid()))
+        print("startup read", n, state, flush=True)
         while not Path(f"release-{n}").exists():
-            await asyncio.sleep(0.01)
+            if state["value"] == "blocking":
+                time.sleep(0.01)
+            else:
+                await asyncio.sleep(0.01)
+        print("startup released", n, flush=True)
         if state["value"] == "fail":
             await send({"type": "lifespan.startup.failed", "message": "expected test failure"})
             return
@@ -104,7 +110,7 @@ class StartupWatchTests(unittest.TestCase):
             if self.process.poll() is not None:
                 break
             time.sleep(0.02)
-        self.fail((self.root / "server.log").read_text())
+        self.fail(f"{sorted(p.name for p in self.root.iterdir())}\n{(self.root / 'server.log').read_text()}")
 
     def started(self, n):
         self.wait(lambda: (self.root / f"started-{n}").exists())
@@ -171,16 +177,15 @@ class StartupWatchTests(unittest.TestCase):
         self.started(1)
         self.release(1)
         self.value("before")
-        path = self.root / "main.py"
-        path.write_text(APP.replace("import asyncio", "import asyncio\nimport time").replace("await asyncio.sleep(0.01)", "time.sleep(0.01)"))
-        self.started(2)
         (self.root / "config.txt").write_text("blocking")
+        self.started(2)
+        (self.root / "config.txt").write_text("after-blocking")
         time.sleep(0.4)
         self.assertFalse((self.root / "started-3").exists())
         self.release(2)
         self.started(3)
         self.release(3)
-        self.value("blocking")
+        self.value("after-blocking")
 
     @unittest.skipIf(sys.platform == "win32", "Windows terminate does not deliver SIGINT")
     def test_interrupt_during_startup_with_pending_change(self):
