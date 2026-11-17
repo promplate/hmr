@@ -3,7 +3,6 @@ from functools import wraps
 from os import getenv
 from pathlib import Path
 from subprocess import Popen, TimeoutExpired
-from sys import argv
 from threading import Event, Thread, local
 
 from reactivity.hmr import __file__ as hmr_file
@@ -33,11 +32,10 @@ patch_meta_path(excludes=excludes)
 
 # State for first patch decision
 (state := local()).disabled = False
-patch_first = "hmr" in Path(argv[0]).name
 
 
 # Preserve original __init__ so we can disable after first construction
-def patch():
+def patch(process: Popen):
     global original_init
 
     @wraps(original_init := BaseReloader.__init__)
@@ -45,6 +43,7 @@ def patch():
         if not state.disabled:
             shutdown_event.set()
             BaseReloader.__init__ = original_init
+            process.terminate()
         original_init(*args, **kwargs)
 
     BaseReloader.__init__ = wrapper
@@ -115,8 +114,5 @@ def run_reloader(process: Popen):
         finally:
             shutdown_event.set()
 
-    if patch_first:
-        patch()
-        Thread(target=watch, daemon=True, name="hmr-daemon").start()
-    else:
-        Thread(target=lambda: [patch(), watch()], daemon=True, name="hmr-daemon").start()
+    patch(process)
+    Thread(target=watch, daemon=True, name="hmr-daemon").start()
