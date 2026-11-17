@@ -35,7 +35,7 @@ async def app(scope, receive, send):
         assert builtins.active == 1, "overlapping lifespans"
         n = builtins.starts
         state.update(value=config.read_text(), pid=os.getpid(), starts=n)
-        Path(f"started-{n}").touch()
+        Path(f"started-{n}").write_text(str(os.getpid()))
         while not Path(f"release-{n}").exists():
             await asyncio.sleep(0.01)
         if state["value"] == "fail":
@@ -73,7 +73,11 @@ class StartupWatchTests(unittest.TestCase):
 
     def stop(self):
         if self.process.poll() is None:
-            self.process.terminate()
+            if sys.platform == "win32":
+                # A venv launcher can have a separate interpreter child.
+                subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], check=False, capture_output=True)
+            else:
+                self.process.terminate()
             # Uvicorn waits for startup to finish before graceful termination.
             for n in range(1, 20):
                 (self.root / f"release-{n}").touch()
@@ -133,11 +137,11 @@ class StartupWatchTests(unittest.TestCase):
         self.started(2)
         self.release(2)
         result = self.value("during")
-        self.assertEqual(result["pid"], self.process.pid)
+        self.assertEqual(result["pid"], int((self.root / "started-1").read_text()))
         (self.root / "config.txt").write_text("later")
         self.started(3)
         self.release(3)
-        self.assertEqual(self.value("later")["pid"], self.process.pid)
+        self.assertEqual(self.value("later")["pid"], result["pid"])
 
     def test_change_during_second_startup_and_atomic_replace(self):
         self.started(1)
@@ -153,7 +157,7 @@ class StartupWatchTests(unittest.TestCase):
         self.release(2)
         self.started(3)
         self.release(3)
-        self.assertEqual(self.value("third")["pid"], self.process.pid)
+        self.assertEqual(self.value("third")["pid"], int((self.root / "started-1").read_text()))
 
     def test_no_change_does_not_reload(self):
         self.started(1)
