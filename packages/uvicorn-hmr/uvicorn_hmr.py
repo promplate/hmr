@@ -71,6 +71,7 @@ def main(
     class Reloader(AsyncReloader):
         def __init__(self):
             super().__init__(str(file), [str(file), *reload_include], reload_exclude)
+            self._ignored_paths = [Path(p).resolve() for p in self.excludes]
             self.error_filter.exclude_filenames.add(__file__)  # exclude error stacks within this file
             self.ready = Event()
             self._run = HMR_CONTEXT.async_derived(self.__run)
@@ -89,8 +90,7 @@ def main(
                 if refresh:
                     self.app = _try_patch(self.app)
                 watched_paths = [Path(p).resolve() for p in self.includes]  # noqa: ASYNC240
-                ignored_paths = [Path(p).resolve() for p in self.excludes]  # noqa: ASYNC240
-                if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
+                if all(is_relative_to_any(path, self._ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                     logger.error("No files to watch for changes. The server will never reload.")
             return self.app
 
@@ -120,6 +120,7 @@ def main(
 
         @override
         def on_changes(self, files: set[Path]):
+            files = {path for path in files if not is_relative_to_any(path, self._ignored_paths)}
             if files.intersection(ReactiveModule.instances) or files.intersection(path for path, s in fs_signals.items() if s.subscribers):
                 if clear:
                     print("\033c", end="", flush=True)
