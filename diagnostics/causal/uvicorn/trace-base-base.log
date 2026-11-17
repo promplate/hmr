@@ -1,0 +1,78 @@
+INFO:     Started server process [7]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:45559 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34208 - "GET / HTTP/1.1" 200 OK
+EVENT_TRACE hmr-daemon PipeReloader ['/tmp/tmpsw5ss9p1/main.py']
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/threading.py", line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/hmr-causal/daemon-base/hmr_daemon/posix/main.py", line 123, in <lambda>
+    Thread(target=lambda: [patch(), watch()], daemon=True, name="hmr-daemon").start()
+  File "/tmp/hmr-causal/daemon-base/hmr_daemon/posix/main.py", line 115, in watch
+    _watch(process)
+  File "/tmp/hmr-causal/daemon-base/hmr_daemon/posix/main.py", line 105, in _watch
+    reloader.start_watching()
+  File "/tmp/hmr-causal/daemon-base/hmr_daemon/posix/main.py", line 89, in start_watching
+    self.on_events(events)
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 296, in on_events
+    self.on_changes({Path(file).resolve() for type, file in events if type is not Change.deleted})
+  File "<string>", line 9, in on_changes
+INFO:     Reloading module 'main' from 'main.py'
+Traceback (most recent call last):
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 241, in __exit__
+    self.flush()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 232, in flush
+    computation.trigger()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 150, in trigger
+    return self()
+           ^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 144, in __call__
+    return self.start(self._call_async)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 23, in default_task_factory
+    match current_async_library():
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/sniffio/_impl.py", line 93, in current_async_library
+    raise AsyncLibraryNotFoundError(
+sniffio._impl.AsyncLibraryNotFoundError: unknown async library, or not in async context
+WARNING:  Watchfiles detected changes in 'server.log', 'main.py'. Reloading...
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpsw5ss9p1/server.log', '/tmp/tmpsw5ss9p1/main.py']
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/tmp/hmr-causal/runtime-base/uvicorn_hmr.py", line 119, in start_watching
+    return await super().start_watching()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 352, in start_watching
+    self.on_events(events)
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 296, in on_events
+    self.on_changes({Path(file).resolve() for type, file in events if type is not Change.deleted})
+  File "/tmp/hmr-causal/runtime-base/uvicorn_hmr.py", line 127, in on_changes
+    return super().on_changes(files)
+  File "<string>", line 9, in on_changes
+INFO:     Reloading module 'main' from 'main.py'
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7]
+INFO:     Started server process [7]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  Watchfiles detected changes in 'started-2', 'config.txt', 'server.log'. Reloading...
+INFO:     Reloading module 'main' from 'main.py'
+INFO:     Uvicorn running on http://127.0.0.1:38761 (Press CTRL+C to quit)
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7]
+INFO:     Started server process [7]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:36881 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59862 - "GET / HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7]

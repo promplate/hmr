@@ -1,0 +1,46 @@
+INFO:     Started server process [21]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:40017 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54372 - "GET / HTTP/1.1" 200 OK
+WARNING:  Watchfiles detected changes in 'main.py', 'server.log'. Reloading...
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpuqd_0bjh/main.py', '/tmp/tmpuqd_0bjh/server.log']
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/tmp/hmr-causal/runtime-base/uvicorn_hmr.py", line 119, in start_watching
+    return await super().start_watching()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 352, in start_watching
+    self.on_events(events)
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 296, in on_events
+    self.on_changes({Path(file).resolve() for type, file in events if type is not Change.deleted})
+  File "/tmp/hmr-causal/runtime-base/uvicorn_hmr.py", line 127, in on_changes
+    return super().on_changes(files)
+  File "<string>", line 9, in on_changes
+INFO:     Reloading module 'main' from 'main.py'
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [21]
+INFO:     Started server process [21]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  Watchfiles detected changes in 'config.txt', 'server.log', 'started-2'. Reloading...
+INFO:     Reloading module 'main' from 'main.py'
+INFO:     Uvicorn running on http://127.0.0.1:32993 (Press CTRL+C to quit)
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [21]
+INFO:     Started server process [21]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:43811 (Press CTRL+C to quit)
+INFO:     127.0.0.1:47064 - "GET / HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [21]

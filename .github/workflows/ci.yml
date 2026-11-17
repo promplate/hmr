@@ -1,20 +1,7 @@
-name: Source rewrite without automatic daemon
-on: [push, workflow_dispatch]
-env:
-  NO_HMR_DAEMON: "1"
+name: Causal evidence (manual)
+on: workflow_dispatch
 jobs:
-  compare:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu, macos]
-        py: ["3.14", "3.15"]
-    runs-on: ${{ matrix.os }}-latest
+  evidence:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ matrix.py }}
-          activate-environment: true
-      - run: uv sync --all-packages
-      - run: python tests/compare_source_rewrite.py
+      - run: echo 'See diagnostics/causal/README.md for exact controlled reproduction recipes.'

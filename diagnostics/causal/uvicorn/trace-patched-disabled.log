@@ -1,0 +1,46 @@
+INFO:     Started server process [39]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:42965 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52686 - "GET / HTTP/1.1" 200 OK
+WARNING:  Watchfiles detected changes in 'server.log', 'main.py', 'release-1', 'started-1'. Reloading...
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpsl0uvwm8/server.log', '/tmp/tmpsl0uvwm8/main.py', '/tmp/tmpsl0uvwm8/release-1', '/tmp/tmpsl0uvwm8/started-1']
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 645, in run_forever
+    self._run_once()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/tmp/hmr-causal/runtime-patched/uvicorn_hmr.py", line 145, in start_watching
+    self.on_events(events)
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 296, in on_events
+    self.on_changes({Path(file).resolve() for type, file in events if type is not Change.deleted})
+  File "/tmp/hmr-causal/runtime-patched/uvicorn_hmr.py", line 153, in on_changes
+    return super().on_changes(files)
+  File "<string>", line 9, in on_changes
+INFO:     Reloading module 'main' from 'main.py'
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [39]
+INFO:     Started server process [39]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:40109 (Press CTRL+C to quit)
+WARNING:  Watchfiles detected changes in 'server.log', 'started-2', 'config.txt'. Reloading...
+INFO:     Reloading module 'main' from 'main.py'
+WARNING:  Application 'main:app' has changed. Restarting server...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [39]
+INFO:     Started server process [39]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:45845 (Press CTRL+C to quit)
+INFO:     127.0.0.1:37012 - "GET / HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [39]

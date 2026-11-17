@@ -1,0 +1,20 @@
+HANDOFF False
+MAIN_BATCH_ENTER [140594775089152]
+DAEMON_BATCH_ENTER [140594775089152, 140594772777568]
+DAEMON_ENTERED True
+RESULT AssertionError
+Traceback (most recent call last):
+  File "/tmp/hmr-race-independent/case/../batch_barrier.py", line 35, in <module>
+    r.on_changes({Path('config.txt').resolve()})
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/hmr/core.py", line 303, in on_changes
+    with self.error_filter, HMR_CONTEXT.batch():
+                            ^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 247, in __exit__
+    assert last is self
+           ^^^^^^^^^^^^
+AssertionError
+Traceback (most recent call last):
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 247, in __exit__
+    assert last is self
+           ^^^^^^^^^^^^
+AssertionError

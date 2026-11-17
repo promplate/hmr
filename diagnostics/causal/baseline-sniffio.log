@@ -1,0 +1,31 @@
+HANDOFF False
+ASYNC_SCHEDULE_THREAD hmr-daemon
+RESULT AsyncLibraryNotFoundError
+Traceback (most recent call last):
+  File "/tmp/hmr-race-independent/case/../sniffio_case.py", line 21, in start
+    return orig(fn)
+           ^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 23, in default_task_factory
+    match current_async_library():
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/sniffio/_impl.py", line 93, in current_async_library
+    raise AsyncLibraryNotFoundError(
+sniffio._impl.AsyncLibraryNotFoundError: unknown async library, or not in async context
+Traceback (most recent call last):
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 241, in __exit__
+    self.flush()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/primitives.py", line 232, in flush
+    computation.trigger()
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 72, in trigger
+    return self.start(self._run_in_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-race-independent/case/../sniffio_case.py", line 21, in start
+    return orig(fn)
+           ^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/reactivity/async_primitives.py", line 23, in default_task_factory
+    match current_async_library():
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/hmr-174-verify/.venv/lib/python3.12/site-packages/sniffio/_impl.py", line 93, in current_async_library
+    raise AsyncLibraryNotFoundError(
+sniffio._impl.AsyncLibraryNotFoundError: unknown async library, or not in async context
+DAEMON_ERROR_SEEN True

@@ -1,0 +1,50 @@
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.393s
+
+OK
+EVENT_TRACE hmr-daemon PipeReloader ['/tmp/tmpsw5ss9p1/main.py']
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpsw5ss9p1/server.log', '/tmp/tmpsw5ss9p1/main.py']
+RESULT base base True
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.430s
+
+OK
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpt0765z9v/server.log', '/tmp/tmpt0765z9v/main.py']
+RESULT base fixed True
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.281s
+
+OK
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpuqd_0bjh/main.py', '/tmp/tmpuqd_0bjh/server.log']
+RESULT base disabled True
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.437s
+
+OK
+EVENT_TRACE hmr-daemon PipeReloader ['/tmp/tmp6mrlr83l/main.py']
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmp6mrlr83l/server.log', '/tmp/tmp6mrlr83l/main.py', '/tmp/tmp6mrlr83l/release-1', '/tmp/tmp6mrlr83l/started-1']
+RESULT patched base True
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.542s
+
+OK
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmp76lv8v1u/started-1', '/tmp/tmp76lv8v1u/main.py', '/tmp/tmp76lv8v1u/server.log', '/tmp/tmp76lv8v1u/release-1']
+RESULT patched fixed True
+test_blocking_startup_buffers_changes (source_case.StartupWatchTests.test_blocking_startup_buffers_changes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.516s
+
+OK
+EVENT_TRACE MainThread main.<locals>.Reloader ['/tmp/tmpsl0uvwm8/server.log', '/tmp/tmpsl0uvwm8/main.py', '/tmp/tmpsl0uvwm8/release-1', '/tmp/tmpsl0uvwm8/started-1']
+RESULT patched disabled True
