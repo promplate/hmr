@@ -59,6 +59,7 @@ async def app(scope, receive, send):
 
 class StartupWatchTests(unittest.TestCase):
     def setUp(self):
+        self.expected_startup_failure = False
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -67,7 +68,8 @@ class StartupWatchTests(unittest.TestCase):
         # Port 0 avoids port-allocation races; discover the actual listener in logs.
         self.log = (self.root / "server.log").open("w+")
         self.addCleanup(self.log.close)
-        env = {**os.environ, "PYTHONPATH": str(PACKAGE)}
+        # Exercise the explicit Uvicorn reloader, not the optional automatic daemon.
+        env = {**os.environ, "PYTHONPATH": str(PACKAGE), "NO_HMR_DAEMON": "1"}
         self.process = subprocess.Popen(
             [sys.executable, "-m", "uvicorn_hmr", "main:app", "--host", "127.0.0.1", "--port", "0"],
             cwd=self.root,
@@ -95,6 +97,14 @@ class StartupWatchTests(unittest.TestCase):
                 self.fail("server did not exit after startup was released")
         self.log.flush()
         text = (self.root / "server.log").read_text()
+        if self.expected_startup_failure:
+            # Uvicorn reports the deliberately requested startup failure via SystemExit.
+            self.assertEqual(text.count("Traceback (most recent call last)"), 1, text)
+            self.assertTrue(text.rstrip().endswith("SystemExit: 3"), text)
+        else:
+            self.assertNotIn("Traceback (most recent call last)", text)
+        self.assertNotIn("AssertionError", text)
+        self.assertNotIn("AsyncLibraryNotFoundError", text)
         self.assertNotIn("overlapping lifespans", text)
         self.assertNotIn("Task was destroyed", text)
         self.assertNotIn("cancel scope", text)
@@ -187,6 +197,22 @@ class StartupWatchTests(unittest.TestCase):
         self.release(3)
         self.value("after-blocking")
 
+    def test_source_rewrite_then_blocking_startup(self):
+        self.started(1)
+        self.release(1)
+        self.value("before")
+        # Replacing async sleep with sync sleep exercises the original diagnostic
+        # scenario separately from the configuration-only blocking-startup test.
+        (self.root / "main.py").write_text(APP.replace("await asyncio.sleep(0.01)", "time.sleep(0.01)"))
+        self.started(2)
+        (self.root / "config.txt").write_text("after-source-rewrite")
+        time.sleep(0.4)
+        self.assertFalse((self.root / "started-3").exists())
+        self.release(2)
+        self.started(3)
+        self.release(3)
+        self.assertEqual(self.value("after-source-rewrite")["pid"], int((self.root / "started-1").read_text()))
+
     @unittest.skipIf(sys.platform == "win32", "Windows terminate does not deliver SIGINT")
     def test_interrupt_during_startup_with_pending_change(self):
         self.started(1)
@@ -197,6 +223,7 @@ class StartupWatchTests(unittest.TestCase):
         self.process.wait(8)
 
     def test_failed_startup_with_pending_change_exits(self):
+        self.expected_startup_failure = True
         self.started(1)
         # The first startup already read "before"; make the second startup fail.
         (self.root / "config.txt").write_text("fail")
