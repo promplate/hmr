@@ -98,12 +98,15 @@ class StartupWatchTests(unittest.TestCase):
                 self.fail("server did not exit after startup was released")
         self.log.flush()
         text = re.sub(r"\x1b\[[0-9;]*m", "", (self.root / "server.log").read_text())
+        tracebacks = text.count("Traceback (most recent call last)")
         if self.expected_startup_failure:
-            # Uvicorn reports the deliberately requested startup failure via SystemExit.
-            self.assertEqual(text.count("Traceback (most recent call last)"), 1, text)
-            self.assertTrue(text.rstrip().endswith("SystemExit: 3"), text)
+            self.assertIn("expected test failure", text)
+            # Older Uvicorn releases can return from serve() without raising SystemExit.
+            if tracebacks:
+                self.assertEqual(tracebacks, 1, text)
+                self.assertTrue(text.rstrip().endswith("SystemExit: 3"), text)
         else:
-            self.assertNotIn("Traceback (most recent call last)", text)
+            self.assertEqual(tracebacks, 0, text)
         self.assertNotIn("AssertionError", text)
         self.assertNotIn("AsyncLibraryNotFoundError", text)
         self.assertNotIn("overlapping lifespans", text)
