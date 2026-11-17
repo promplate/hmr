@@ -28,7 +28,7 @@ This project supports Python 3.12+, and is compatible with alternative Python ru
 ## Links
 
 - Repo: Most code lives in [promplate/hmr](https://github.com/promplate/hmr "hmr — real hot-module reload for Python"), except the [core library](https://github.com/promplate/pyth-on-line/tree/main/packages/hmr "hmr core package — promplate/pyth-on-line/packages/hmr") and [tests](https://github.com/promplate/pyth-on-line/tree/main/tests/py "hmr tests — promplate/pyth-on-line/tests/py") are temporarily in another repo
-- Docs: [Docs](https://hmr.promplate.dev/ "HMR — Official documentation") / [Interactive Docs (under construction)](https://py3.online/hmr "An interactive online notebook built with Pyodide py3.online/hmr") / [llms.txt](https://py3.online/hmr/llms.txt "llms.txt — LLM-friendly docs") / [Docs MCP Server](https://py3.online/hmr/mcp "HMR MCP Server — py3.online/hmr/mcp")
+- Docs: [Docs](https://hmr.promplate.dev/ "HMR — Official documentation") / [Interactive Docs (under construction)](https://pyth-on-line.promplate.dev/hmr "An interactive online notebook built with Pyodide pyth-on-line.promplate.dev/hmr") / [llms.txt](https://pyth-on-line.promplate.dev/hmr/llms.txt "llms.txt — LLM-friendly docs") / [Docs MCP Server](https://pyth-on-line.promplate.dev/hmr/mcp "HMR MCP Server — pyth-on-line.promplate.dev/hmr/mcp")
 - PyPI: [hmr](https://pypi.org/project/hmr/ "hmr - PyPI") / [hmr-daemon](https://pypi.org/project/hmr-daemon/ "hmr-daemon - PyPI") / [uvicorn-hmr](https://pypi.org/project/uvicorn-hmr/ "uvicorn-hmr - PyPI") / [mcp-hmr](https://pypi.org/project/mcp-hmr/ "mcp-hmr - PyPI")
 
 ## Comparisons
