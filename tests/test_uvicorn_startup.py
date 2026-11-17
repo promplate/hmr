@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -96,7 +97,7 @@ class StartupWatchTests(unittest.TestCase):
                 self.process.wait()
                 self.fail("server did not exit after startup was released")
         self.log.flush()
-        text = (self.root / "server.log").read_text()
+        text = re.sub(r"\x1b\[[0-9;]*m", "", (self.root / "server.log").read_text())
         if self.expected_startup_failure:
             # Uvicorn reports the deliberately requested startup failure via SystemExit.
             self.assertEqual(text.count("Traceback (most recent call last)"), 1, text)
