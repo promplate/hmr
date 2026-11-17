@@ -9,7 +9,7 @@ summary = []
 with tempfile.TemporaryDirectory() as directory:
     baseline = Path(directory)
     (baseline / "uvicorn_hmr.py").write_text(Path(__file__).with_name("baseline_uvicorn.txt").read_text())
-    for seed in range(5):
+    for seed in range(10):
         os.environ["PYTHONHASHSEED"] = str(seed)
         for label, package in [("baseline", baseline), ("patched", patched)]:
             print(f"COMPARE {label} seed={seed}", flush=True)
@@ -18,3 +18,6 @@ with tempfile.TemporaryDirectory() as directory:
             result = unittest.TextTestRunner(verbosity=2).run(suite)
             summary.append((label, seed, result.wasSuccessful()))
 print("COMPARISON_SUMMARY", summary, flush=True)
+
+if not all(passed for _, _, passed in summary):
+    raise SystemExit(1)

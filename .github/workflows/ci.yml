@@ -1,5 +1,7 @@
-name: Startup source rewrite comparison
+name: Source rewrite without automatic daemon
 on: [push, workflow_dispatch]
+env:
+  NO_HMR_DAEMON: "1"
 jobs:
   compare:
     strategy:

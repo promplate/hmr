@@ -77,7 +77,6 @@ def main(
             self._run = HMR_CONTEXT.async_derived(self.__run)
 
         async def __run(self):
-            print("TRACE __run", time(), main_loop_started.is_set(), bool(server), flush=True)
             nonlocal need_restart
             if server:
                 logger.warning("Application '%s' has changed. Restarting server...", slug)
@@ -86,7 +85,6 @@ def main(
                 need_restart = True  # serve again once this reload-driven shutdown finishes
                 server.should_exit = True
                 await finish.wait()
-                print("TRACE finish waited", time(), flush=True)
             with self.error_filter:
                 self.app = getattr(import_module(module), attr)
                 if refresh:
@@ -102,7 +100,6 @@ def main(
                 await self._run()
                 if not self._run.dirty:  # in case user code changed during reload
                     break
-            print("TRACE ready set", time(), flush=True)
             self.ready.set()
 
         async def __aenter__(self):
@@ -141,13 +138,10 @@ def main(
             # lifespan startup completes. Cancellation also handles failed startup,
             # where main_loop_started will never be set.
             await main_loop_started.wait()
-            print("TRACE initial events", time(), self.__initial_events, flush=True)
             self.on_events(self.__initial_events)
             async for events in self.__watcher:
                 if events:
-                    print("TRACE captured", time(), events, main_loop_started.is_set(), flush=True)
                     await main_loop_started.wait()
-                    print("TRACE deliver", time(), events, flush=True)
                     self.on_events(events)
 
         @override
@@ -184,7 +178,6 @@ def main(
                 return super().handle_exit(sig, frame)
 
             async def main_loop(self):
-                print("TRACE main_loop set", time(), flush=True)
                 main_loop_started.set()
                 if await self.on_tick(0):
                     return
@@ -240,7 +233,6 @@ def main(
                     server = _Server(Config(reloader.app, host, port, env_file=env_file, log_level=log_level))
                     try:
                         await server.serve()
-                        print("TRACE main_loop clear", time(), flush=True)
                         main_loop_started.clear()
                     except KeyboardInterrupt:
                         break
