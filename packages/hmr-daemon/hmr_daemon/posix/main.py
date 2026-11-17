@@ -32,6 +32,7 @@ excludes = (venv,) if (venv := getenv("VIRTUAL_ENV")) else ()
 # Patch import machinery early
 patch_meta_path(excludes=excludes)
 
+
 # Preserve original __init__ so we can disable after first construction
 def patch(process: Popen):
     global original_init
