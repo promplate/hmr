@@ -108,9 +108,8 @@ def _watch(process: Popen):
 
 
 def run_reloader(process: Popen):
-    state.disabled = True  # disable self-shutdown wrapper until first reloader init
-
     def watch():
+        state.disabled = True
         try:
             _watch(process)
         finally:
