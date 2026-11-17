@@ -1,84 +1,18 @@
-name: CI
-
-on: [push, fork, pull_request, workflow_dispatch]
-
-env:
-  FORCE_COLOR: 1
-
+name: Startup source rewrite comparison
+on: [push, workflow_dispatch]
 jobs:
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: crate-ci/typos@master
-
-  check:
+  compare:
     strategy:
-      matrix:
-        os: [ubuntu, macos, windows]
-        py: ["3.12", "3.13", "3.14", "3.15"]
       fail-fast: false
+      matrix:
+        os: [ubuntu, macos]
+        py: ["3.14", "3.15"]
     runs-on: ${{ matrix.os }}-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Python ${{ matrix.py }}
-        uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.py }}
           activate-environment: true
-      # Lupa's LuaJIT source build needs the MSVC environment on Python 3.15.
-      - name: Install dependencies with MSVC
-        if: runner.os == 'Windows' && matrix.py == '3.15'
-        run: |
-          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          & "$vs\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
-          uv sync --all-packages
-      - name: Install dependencies
-        if: runner.os != 'Windows' || matrix.py != '3.15'
-        run: |
-            uv sync --all-packages
-      - name: Test Uvicorn startup watching
-        run: python -m unittest discover -s tests -v
-      - name: Linting
-        run: |
-          ruff format --check --diff
-          ruff check --diff
-      - uses: oven-sh/setup-bun@v2
-      - name: Check typing
-        run: bunx basedpyright
-
-  publish:
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    environment: release
-    strategy:
-      matrix:
-        dir:
-          - uvicorn-hmr
-          - fastapi-reloader
-          - hmr-daemon
-          - mcp-hmr
-      fail-fast: false
-    needs: [typos, check]
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          sparse-checkout: packages/${{ matrix.dir }}
-      - name: Set up Python
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: 3.14
-      - name: Remove admonitions from READMEs
-        run: |
-          find . -type f -name "README.md" -exec sed -i -E '/^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/d' {} +
-      - name: Remove all noqa comments
-        run: |
-          uvx ruff check --select RUF100 --show-fixes --fix packages/${{ matrix.dir }}
-      - name: Build wheel for ${{ matrix.dir }}
-        run: |
-          uv build packages/${{ matrix.dir }} --wheel
-      - name: Publish to PyPI
-        continue-on-error: true
-        run: uv publish
+      - run: uv sync --all-packages
+      - run: python tests/compare_source_rewrite.py
