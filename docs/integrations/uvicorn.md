@@ -49,6 +49,24 @@ uvicorn-hmr main:app --refresh
 
 This patches HTML responses to notify browser pages when the server reloads. A JSON response, such as the example above, has no HTML page to patch. See the [FastAPI example](https://github.com/promplate/hmr/tree/docs/examples/fastapi) for an HTML application and [fastapi-reloader reference](../references/fastapi-reloader.md).
 
+## Configuration files read during lifespan
+
+With `uvicorn-hmr 0.1.1.8` and `hmr 0.7.6.3`, a file read only during ASGI lifespan startup does **not** automatically become a reload dependency. Lifespan runs outside the reactive module-loading scope. Adding the file to `--reload-include`, or calling `track()` only inside lifespan, does not establish that dependency.
+
+Declare the dependency at module top level in the HMR-loaded application module instead, before creating the app:
+
+```python
+from pathlib import Path
+from reactivity.hmr.fs import track
+
+CONFIG_FILE = Path(__file__).with_name("config.txt").resolve()
+track(CONFIG_FILE)  # module top level, not inside the lifespan handler
+```
+
+Keep reading `CONFIG_FILE` in your lifespan handler as usual. The absolute path passed to `track()` must be covered by the watched paths and accepted by the watcher's file filters. With this declaration, changing the file invalidates the application module and restarts the server in the same process, rerunning lifespan shutdown and startup. Reading the file at module top level also establishes a dependency automatically.
+
+Without that declaration, editing the application module still reruns lifespan and picks up the latest configuration; editing only the configuration file does not. See [issue #118](https://github.com/promplate/hmr/issues/118).
+
 ## Lifecycle limits
 
 - Top-level code runs again when its module reloads. Heavy objects in unaffected modules can survive; objects assigned again in re-executed code are not automatically preserved.
