@@ -39,41 +39,51 @@ A `TaskFactory` receives a zero-argument async function and must schedule it, re
 ## Basic Example
 
 ```python
-from anyio import sleep
+import asyncio
 from reactivity import signal, async_derived, async_effect
 
-count = signal(1)
 
 async def main():
+    count = signal(1)
+    updated = asyncio.Event()
+
     @async_derived
     async def doubled():
-        await sleep(0.01)
-        return count.get() * 2
+        await asyncio.sleep(0)
+        return count.get() * 2  # reads after await are tracked too
 
-    @async_effect
+    @async_effect(call_immediately=False)
     async def printer():
         print(await doubled())
+        updated.set()
 
-    await sleep(0.03)
-    count.set(2)
-    await sleep(0.03)
+    try:
+        await printer()  # prints 2 and establishes subscriptions
+        updated.clear()
+        count.set(2)
+        await asyncio.wait_for(updated.wait(), timeout=1)  # prints 4
+    finally:
+        printer.dispose()
+        doubled.dispose()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-In IPython or a notebook, run `await main()`.
-In a script, the release notes pattern is `from anyio import run; run(main)`.
+In a notebook with an active event loop, use `await main()` instead of `asyncio.run(main())`.
 
-Creating `printer` schedules an initial run by default. Later, `count.set(2)` marks `doubled` dirty and schedules the effect again, so this example prints `2` and then `4`.
-
-Because the work is asynchronous, you usually observe the rerun only after control returns to the event loop.
+The first explicit call establishes subscriptions before `count` changes. The event waits for the subsequent effect run, rather than assuming a fixed sleep is long enough. With the default `call_immediately=True`, construction schedules the initial run instead; give that run time to establish subscriptions before relying on updates.
 
 ## Custom Task Ownership
 
 ```python
 from asyncio import TaskGroup, sleep
-from reactivity import async_effect
+from reactivity import async_effect, signal
 
 
 async def main():
+    tick = signal("tick")
     async with TaskGroup() as tg:
 
         @async_effect(
@@ -82,10 +92,10 @@ async def main():
         )
         async def printer():
             await sleep(0.01)
-            print("tick")
+            print(tick.get())
 
         await printer()  # manually trigger the first run
-        await sleep(0.02)
+        printer.dispose()
 ```
 
 Use this pattern when tasks must belong to a specific supervisor instead of the library's default scheduler.
@@ -95,9 +105,14 @@ Use this pattern when tasks must belong to a specific supervisor instead of the 
 - `AsyncEffect(..., call_immediately=False)` defers the first run until you explicitly await or otherwise trigger it.
 - `AsyncDerived(..., check_equality=True)` keeps the same equality-based notification behavior as sync `derived`; equal recomputations do not notify subscribers.
 - Tracking happens when you call an `AsyncDerived`, not when the returned awaitable is later awaited. In normal code, `await total()` is fine because the call and await happen together.
-- Concurrent callers share the same in-flight recomputation. If a recompute is already running, later callers await the same task instead of starting duplicate work.
+- Concurrent reads share an in-flight recomputation while it remains valid. Invalidation clears that task reference, so a new read after invalidation can start another run while the old one is still in flight. Do not assume cancellation, serialization, or latest-result-wins behavior.
 - Before recomputing an `AsyncDerived`, the implementation synchronizes dirty derived dependencies first, including mixed sync/async derived chains.
-- `dispose()` removes subscriptions so future dependency changes stop auto-triggering the computation. It does not cancel tasks that were already scheduled.
+- `dispose()` removes current subscriptions. It does not cancel tasks that were already scheduled. A running task can still perform side effects and collect dependencies after disposal; coordinate shutdown with the task owner rather than treating disposal as cancellation.
+- Async effects schedule a task for each trigger; rapid changes can overlap runs. Use explicit task ownership and application-level coordination when overlap would be unsafe.
+
+## Verification scope
+
+The asyncio examples and core semantics above were exercised against hmr 0.7.6.3 and [core commit cdf0c657](https://github.com/promplate/pyth-on-line/tree/cdf0c6579ab58b90306eee99bf477b6d980aab05/packages/hmr/reactivity). Trio and Emscripten runtime behavior was inspected in source, not executed. The tests cover ordinary propagation and concurrent reads, not every overlapping invalidation race.
 
 ## API Reference
 
