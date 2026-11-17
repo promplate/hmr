@@ -3,7 +3,7 @@ from functools import wraps
 from os import getenv
 from pathlib import Path
 from subprocess import Popen, TimeoutExpired
-from threading import Event, Thread, local
+from threading import Event, Lock, Thread, local
 
 from reactivity.hmr import __file__ as hmr_file
 from reactivity.hmr.core import BaseReloader, ErrorFilter, ReactiveModuleLoader, SyncReloader, patch_meta_path
@@ -23,6 +23,8 @@ ReactiveModuleLoader.get_code = get_code  # type: ignore
 
 # Shared shutdown event (pipe reader thread stops when set)
 shutdown_event = Event()
+# Serialize daemon callbacks with handoff, without waiting in the caller.
+reload_lock = Lock()
 
 # Compute excludes (e.g. virtualenv) similar to windows implementation
 excludes = (venv,) if (venv := getenv("VIRTUAL_ENV")) else ()
@@ -40,11 +42,19 @@ def patch(process: Popen):
 
     @wraps(original_init := BaseReloader.__init__)
     def wrapper(*args, **kwargs):
-        if not state.disabled:
+        if getattr(state, "disabled", False):
+            return original_init(*args, **kwargs)
+        # A callback may need this thread (for example, an import lock).
+        # Reject a busy handoff rather than blocking or allowing both reloaders.
+        if not reload_lock.acquire(blocking=False):
+            raise RuntimeError("Cannot take over HMR while a reload or handoff is active; retry after it completes, or start with NO_HMR_DAEMON=1.")
+        try:
+            original_init(*args, **kwargs)
             shutdown_event.set()
             BaseReloader.__init__ = original_init
             process.terminate()
-        original_init(*args, **kwargs)
+        finally:
+            reload_lock.release()
 
     BaseReloader.__init__ = wrapper
 
@@ -83,9 +93,10 @@ class PipeReloader(SyncReloader):
 
     def start_watching(self):
         for events in self.iterate_pipe_events():
-            if shutdown_event.is_set():
-                return
-            self.on_events(events)
+            with reload_lock:
+                if shutdown_event.is_set():
+                    return
+                self.on_events(events)
 
     def cleanup(self):
         if self._process.poll() is None:
