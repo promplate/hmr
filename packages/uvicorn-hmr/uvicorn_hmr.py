@@ -103,14 +103,26 @@ def main(
             self.ready.set()
 
         async def __aenter__(self):
-            from watchfiles import awatch
+            from watchfiles import DefaultFilter, awatch
+
+            watch_filter = DefaultFilter()
+            priming = True
 
             # Prime the watcher before importing user code. Scheduling a task alone
             # does not guarantee that the native watcher is already listening.
-            self.__watcher = awatch(self.entry, *self.includes, stop_event=self._stop_event, yield_on_timeout=True, rust_timeout=100)
+            # Even a batch of ignored changes confirms that the watcher is ready.
+            self.__watcher = awatch(
+                self.entry,
+                *self.includes,
+                watch_filter=lambda change, path: priming or watch_filter(change, path),
+                stop_event=self._stop_event,
+                yield_on_timeout=True,
+                rust_timeout=100,
+            )
             self.__run_effect = HMR_CONTEXT.async_effect(self.run, call_immediately=False)
             try:
-                self.__initial_events = await anext(self.__watcher)
+                self.__initial_events = {event for event in await anext(self.__watcher) if watch_filter(*event)}
+                priming = False
                 call_pre_reload_hooks()
                 await self.__run_effect()
                 call_post_reload_hooks()
