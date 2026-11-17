@@ -63,7 +63,7 @@ CONFIG_FILE = Path(__file__).with_name("config.txt").resolve()
 track(CONFIG_FILE)  # module top level, not inside the lifespan handler
 ```
 
-Keep reading `CONFIG_FILE` in your lifespan handler as usual. The absolute path passed to `track()` must be covered by the watched paths and accepted by the watcher's file filters. With this declaration, changing the file invalidates the application module and restarts the server in the same process, rerunning lifespan shutdown and startup. Reading the file at module top level also establishes a dependency automatically.
+Keep reading `CONFIG_FILE` in your lifespan handler as usual. The absolute path passed to `track()` must be covered by the watched paths and accepted by the watcher's file filters. With this declaration, changing the file after the watcher starts invalidates the application module and restarts the server in the same process, rerunning lifespan shutdown and startup. The watcher starts after lifespan startup, so edits during startup can be missed. Reading the file at module top level also establishes a dependency automatically.
 
 Without that declaration, editing the application module still reruns lifespan and picks up the latest configuration; editing only the configuration file does not. See [issue #118](https://github.com/promplate/hmr/issues/118).
 
