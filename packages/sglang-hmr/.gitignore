@@ -1,0 +1,3 @@
+# Not in the root ignore: both are produced only by building/testing this package.
+.pytest_cache/
+.pdm-build/
