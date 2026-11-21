@@ -52,7 +52,8 @@ def main(
             fg="red",
         )
 
-    from asyncio import FIRST_COMPLETED, Event, Future, ensure_future, run, sleep, wait
+    from asyncio import FIRST_COMPLETED, CancelledError, Event, Future, ensure_future, run, sleep, wait
+    from contextlib import suppress
     from functools import cache, wraps
     from importlib import import_module
     from logging import getLogger
@@ -102,21 +103,58 @@ def main(
             self.ready.set()
 
         async def __aenter__(self):
-            call_pre_reload_hooks()
+            from watchfiles import DefaultFilter, awatch
+
+            watch_filter = DefaultFilter()
+            priming = True
+
+            # Prime the watcher before importing user code. Scheduling a task alone
+            # does not guarantee that the native watcher is already listening.
+            # Even a batch of ignored changes confirms that the watcher is ready.
+            self.__watcher = awatch(
+                self.entry,
+                *self.includes,
+                watch_filter=lambda change, path: priming or watch_filter(change, path),
+                stop_event=self._stop_event,
+                yield_on_timeout=True,
+                rust_timeout=100,
+            )
             self.__run_effect = HMR_CONTEXT.async_effect(self.run, call_immediately=False)
-            await self.__run_effect()
-            call_post_reload_hooks()
-            self.__reloader_task = ensure_future(self.start_watching())
+            try:
+                self.__initial_events = {event for event in await anext(self.__watcher) if watch_filter(*event)}
+                priming = False
+                call_pre_reload_hooks()
+                await self.__run_effect()
+                call_post_reload_hooks()
+                self.__reloader_task = ensure_future(self.start_watching())
+            except BaseException:
+                try:
+                    await self.__watcher.aclose()
+                finally:
+                    self.__run_effect.dispose()
+                raise
             return self
 
         async def __aexit__(self, *_):
             self.stop_watching()
-            self.__run_effect.dispose()
-            await self.__reloader_task
+            self.__reloader_task.cancel()
+            try:
+                with suppress(CancelledError):
+                    await self.__reloader_task
+            finally:
+                self.__run_effect.dispose()
+                await self.__watcher.aclose()
 
         async def start_watching(self):
+            # Capture startup changes, but do not invalidate live modules until
+            # lifespan startup completes. Cancellation also handles failed startup,
+            # where main_loop_started will never be set.
             await main_loop_started.wait()
-            return await super().start_watching()
+            self.on_events(self.__initial_events)
+            async for events in self.__watcher:
+                if events:
+                    await main_loop_started.wait()
+                    self.on_events(events)
 
         @override
         def on_changes(self, files: set[Path]):

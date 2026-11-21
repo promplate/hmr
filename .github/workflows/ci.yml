@@ -37,6 +37,8 @@ jobs:
         if: runner.os != 'Windows' || matrix.py != '3.15'
         run: |
             uv sync --all-packages
+      - name: Test Uvicorn startup watching
+        run: python -m unittest discover -s tests -v
       - name: Linting
         run: |
           ruff format --check --diff
