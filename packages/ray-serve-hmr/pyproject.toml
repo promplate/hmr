@@ -1,0 +1,24 @@
+[project]
+name = "ray-serve-hmr"
+description = "Hot Module Replacement for a Ray Serve replica's request path"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["ray", "ray-serve", "hot-reload", "hmr"]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "hmr>=0.7,<0.8",
+    "watchfiles>=0.21,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ray_serve_hmr"]
