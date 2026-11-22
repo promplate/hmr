@@ -1,6 +1,6 @@
 [project]
 name = "hmr-daemon"
-version = "0.4.2.1"
+version = "0.4.2.2"
 dependencies = [
     "hmr>=0.5.0,<0.8",
 ]

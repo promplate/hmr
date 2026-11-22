@@ -3,7 +3,7 @@ name = "another-example"
 version = "0"
 requires-python = ">=3.12"
 dependencies = [
-    "rich~=14.3.3",
+    "rich~=15.0.0",
     "hmr~=0.7.0",
 ]
 

@@ -52,7 +52,8 @@ def main(
             fg="red",
         )
 
-    from asyncio import FIRST_COMPLETED, Event, Future, ensure_future, run, sleep, wait
+    from asyncio import FIRST_COMPLETED, CancelledError, Event, Future, ensure_future, run, sleep, wait
+    from contextlib import suppress
     from functools import cache, wraps
     from importlib import import_module
     from logging import getLogger
@@ -71,15 +72,18 @@ def main(
     class Reloader(AsyncReloader):
         def __init__(self):
             super().__init__(str(file), [str(file), *reload_include], reload_exclude)
+            self._ignored_paths = [Path(p).resolve() for p in self.excludes]
             self.error_filter.exclude_filenames.add(__file__)  # exclude error stacks within this file
             self.ready = Event()
             self._run = HMR_CONTEXT.async_derived(self.__run)
 
         async def __run(self):
+            nonlocal need_restart
             if server:
                 logger.warning("Application '%s' has changed. Restarting server...", slug)
                 self.ready.clear()
                 await main_loop_started.wait()
+                need_restart = True  # serve again once this reload-driven shutdown finishes
                 server.should_exit = True
                 await finish.wait()
             with self.error_filter:
@@ -87,8 +91,7 @@ def main(
                 if refresh:
                     self.app = _try_patch(self.app)
                 watched_paths = [Path(p).resolve() for p in self.includes]  # noqa: ASYNC240
-                ignored_paths = [Path(p).resolve() for p in self.excludes]  # noqa: ASYNC240
-                if all(is_relative_to_any(path, ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
+                if all(is_relative_to_any(path, self._ignored_paths) or not is_relative_to_any(path, watched_paths) for path in ReactiveModule.instances):
                     logger.error("No files to watch for changes. The server will never reload.")
             return self.app
 
@@ -100,30 +103,66 @@ def main(
             self.ready.set()
 
         async def __aenter__(self):
-            call_pre_reload_hooks()
+            from watchfiles import DefaultFilter, awatch
+
+            watch_filter = DefaultFilter()
+            priming = True
+
+            # Prime the watcher before importing user code. Scheduling a task alone
+            # does not guarantee that the native watcher is already listening.
+            # Even a batch of ignored changes confirms that the watcher is ready.
+            self.__watcher = awatch(
+                self.entry,
+                *self.includes,
+                watch_filter=lambda change, path: priming or watch_filter(change, path),
+                stop_event=self._stop_event,
+                yield_on_timeout=True,
+                rust_timeout=100,
+            )
             self.__run_effect = HMR_CONTEXT.async_effect(self.run, call_immediately=False)
-            await self.__run_effect()
-            call_post_reload_hooks()
-            self.__reloader_task = ensure_future(self.start_watching())
+            try:
+                self.__initial_events = {event for event in await anext(self.__watcher) if watch_filter(*event)}
+                priming = False
+                call_pre_reload_hooks()
+                await self.__run_effect()
+                call_post_reload_hooks()
+                self.__reloader_task = ensure_future(self.start_watching())
+            except BaseException:
+                try:
+                    await self.__watcher.aclose()
+                finally:
+                    self.__run_effect.dispose()
+                raise
             return self
 
         async def __aexit__(self, *_):
             self.stop_watching()
-            self.__run_effect.dispose()
-            await self.__reloader_task
+            self.__reloader_task.cancel()
+            try:
+                with suppress(CancelledError):
+                    await self.__reloader_task
+            finally:
+                self.__run_effect.dispose()
+                await self.__watcher.aclose()
 
         async def start_watching(self):
+            # Capture startup changes, but do not invalidate live modules until
+            # lifespan startup completes. Cancellation also handles failed startup,
+            # where main_loop_started will never be set.
             await main_loop_started.wait()
-            return await super().start_watching()
+            self.on_events(self.__initial_events)
+            async for events in self.__watcher:
+                if events:
+                    await main_loop_started.wait()
+                    self.on_events(events)
 
         @override
         def on_changes(self, files: set[Path]):
+            files = {path for path in files if not is_relative_to_any(path, self._ignored_paths)}
             if files.intersection(ReactiveModule.instances) or files.intersection(path for path, s in fs_signals.items() if s.subscribers):
                 if clear:
                     print("\033c", end="", flush=True)
                 logger.warning("Watchfiles detected changes in %s. Reloading...", ", ".join(map(_display_path, files)))
-                nonlocal need_restart
-                need_restart = True
                 return super().on_changes(files)
 
     main_loop_started = Event()
